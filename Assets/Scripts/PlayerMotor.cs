@@ -17,7 +17,7 @@ public class PlayerMotor : MonoBehaviour
     private CharacterController controller;
     private Vector3 velocity;
 
-    public bool IsGrounded => controller.isGrounded;
+    public bool IsGrounded => controller != null && controller.enabled && controller.isGrounded;
 
     void Awake()
     {
@@ -27,7 +27,11 @@ public class PlayerMotor : MonoBehaviour
 
     void Update()
     {
+        if (controller == null || !controller.enabled || !gameObject.activeInHierarchy)
+            return;
+
         bool grounded = controller.isGrounded;
+
         if (grounded && velocity.y < 0f)
             velocity.y = -2f;
 
@@ -38,13 +42,20 @@ public class PlayerMotor : MonoBehaviour
         bool crouch = Input.GetKey(KeyCode.LeftControl);
 
         float speed = crouch ? crouchSpeed : (sprint ? sprintSpeed : walkSpeed);
+
         Vector3 move = transform.right * x + transform.forward * z;
         controller.Move(move * speed * Time.deltaTime);
 
         if (Input.GetButtonDown("Jump") && grounded && !crouch)
+        {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+        }
 
-        controller.height = Mathf.Lerp(controller.height, crouch ? crouchHeight : standingHeight, 12f * Time.deltaTime);
+        controller.height = Mathf.Lerp(
+            controller.height,
+            crouch ? crouchHeight : standingHeight,
+            12f * Time.deltaTime
+        );
 
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
