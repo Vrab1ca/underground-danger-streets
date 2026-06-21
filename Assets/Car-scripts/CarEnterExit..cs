@@ -10,8 +10,11 @@ public class CarEnterExit : MonoBehaviour
     public Camera playerCamera;
     public Camera carCamera;
 
-    [Header("Disable These Player Scripts When Driving")]
+    [Header("Disable ONLY movement scripts here")]
     public MonoBehaviour[] playerScriptsToDisable;
+
+    [Header("Optional: hide player body while driving")]
+    public GameObject[] objectsToHideWhenDriving;
 
     [Header("Settings")]
     public float enterDistance = 8f;
@@ -20,12 +23,14 @@ public class CarEnterExit : MonoBehaviour
     public bool PlayerInside { get; private set; }
 
     private CharacterController characterController;
+    private Transform originalPlayerParent;
 
     private void Start()
     {
         if (player != null)
         {
             characterController = player.GetComponent<CharacterController>();
+            originalPlayerParent = player.transform.parent;
         }
 
         PlayerInside = false;
@@ -41,45 +46,28 @@ public class CarEnterExit : MonoBehaviour
     {
         if (Input.GetKeyDown(enterExitKey))
         {
-            Debug.Log("E pressed");
-
             if (PlayerInside)
-            {
                 ExitCar();
-            }
             else
-            {
                 TryEnterCar();
-            }
         }
     }
 
     private void TryEnterCar()
     {
         if (player == null)
-        {
-            Debug.LogError("Player is missing!");
             return;
-        }
 
         float distance = Vector3.Distance(player.transform.position, transform.position);
 
-        Debug.Log("Distance to car: " + distance);
-
         if (distance <= enterDistance)
-        {
             EnterCar();
-        }
         else
-        {
-            Debug.Log("Too far from car. Go closer or increase Enter Distance.");
-        }
+            Debug.Log("Too far from car. Distance: " + distance);
     }
 
     private void EnterCar()
     {
-        Debug.Log("Entered car");
-
         PlayerInside = true;
 
         if (characterController != null)
@@ -91,25 +79,32 @@ public class CarEnterExit : MonoBehaviour
                 script.enabled = false;
         }
 
-        player.transform.position = seatPoint.position;
-        player.transform.rotation = seatPoint.rotation;
+        // Put player inside the car and make player follow the car
+        player.transform.SetParent(seatPoint);
+        player.transform.localPosition = Vector3.zero;
+        player.transform.localRotation = Quaternion.identity;
 
-        player.SetActive(false);
+        // Hide only body/visual objects if you want
+        foreach (GameObject obj in objectsToHideWhenDriving)
+        {
+            if (obj != null)
+                obj.SetActive(false);
+        }
 
         if (carController != null)
             carController.canDrive = true;
 
         SetCamera(playerCamera, false);
         SetCamera(carCamera, true);
+
+        Debug.Log("Entered car. Weapon should still work.");
     }
 
     private void ExitCar()
     {
-        Debug.Log("Exited car");
-
         PlayerInside = false;
 
-        player.SetActive(true);
+        player.transform.SetParent(originalPlayerParent);
 
         if (characterController != null)
             characterController.enabled = false;
@@ -126,11 +121,19 @@ public class CarEnterExit : MonoBehaviour
                 script.enabled = true;
         }
 
+        foreach (GameObject obj in objectsToHideWhenDriving)
+        {
+            if (obj != null)
+                obj.SetActive(true);
+        }
+
         if (carController != null)
             carController.canDrive = false;
 
         SetCamera(carCamera, false);
         SetCamera(playerCamera, true);
+
+        Debug.Log("Exited car.");
     }
 
     private void SetCamera(Camera cam, bool active)
@@ -138,7 +141,8 @@ public class CarEnterExit : MonoBehaviour
         if (cam == null)
             return;
 
-        cam.gameObject.SetActive(active);
+        // Do NOT use cam.gameObject.SetActive(false)
+        // because WeaponHolder is child of Main Camera.
         cam.enabled = active;
 
         AudioListener listener = cam.GetComponent<AudioListener>();

@@ -7,10 +7,11 @@ public class CarHUD : MonoBehaviour
     public CarController carController;
     public CarEnterExit carEnterExit;
 
-    [Header("UI Text")]
+    [Header("UI Texts")]
     public TextMeshProUGUI speedText;
-    public TextMeshProUGUI gearText;
     public TextMeshProUGUI rpmText;
+    public TextMeshProUGUI gearText;
+    public TextMeshProUGUI boostText;
     public TextMeshProUGUI driftText;
     public TextMeshProUGUI helpText;
 
@@ -21,40 +22,43 @@ public class CarHUD : MonoBehaviour
 
         bool insideCar = carEnterExit.PlayerInside;
 
-        if (speedText != null)
-        {
-            speedText.gameObject.SetActive(insideCar);
-            speedText.text = Mathf.RoundToInt(carController.speedKmh) + " KM/H";
-        }
+        UpdateTextVisibility(insideCar);
 
-        if (gearText != null)
+        if (insideCar)
         {
-            gearText.gameObject.SetActive(insideCar);
+            speedText.text = Mathf.RoundToInt(carController.speedKmh) + " KM/H";
+            rpmText.text = "RPM: " + Mathf.RoundToInt(carController.rpm);
             gearText.text = "Gear: " + carController.gear;
+
+            boostText.text = carController.isBoosting ? "BOOST" : "";
+            driftText.text = carController.isDrifting ? "DRIFTING" : "";
+
+            helpText.text = "W/S - Drive | A/D - Steer | Shift - Boost | Space - Drift | E - Exit | Mouse - Shoot";
         }
+        else
+        {
+            helpText.text = "Go near the car and press E";
+        }
+    }
+
+    private void UpdateTextVisibility(bool insideCar)
+    {
+        if (speedText != null)
+            speedText.gameObject.SetActive(insideCar);
 
         if (rpmText != null)
-        {
             rpmText.gameObject.SetActive(insideCar);
-            rpmText.text = "RPM: " + Mathf.RoundToInt(carController.rpm);
-        }
+
+        if (gearText != null)
+            gearText.gameObject.SetActive(insideCar);
+
+        if (boostText != null)
+            boostText.gameObject.SetActive(insideCar);
 
         if (driftText != null)
-        {
             driftText.gameObject.SetActive(insideCar);
-            driftText.text = carController.isDrifting ? "DRIFTING" : "";
-        }
 
         if (helpText != null)
-        {
-            if (insideCar)
-            {
-                helpText.text = "E - Exit | W/S - Drive | A/D - Steer | Space - Drift | Shift - Brake";
-            }
-            else
-            {
-                helpText.text = "Go near the car and press E";
-            }
-        }
+            helpText.gameObject.SetActive(true);
     }
 }
