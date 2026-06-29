@@ -14,6 +14,10 @@ public class HelicopterBombDropper : MonoBehaviour
     public float dropCooldown = 0.7f;
     public float downwardDropSpeed = 5f;
 
+    [Header("Fuel")]
+    public VehicleFuel fuel;
+    public float fuelCostPerBomb = 3f;
+
     private Rigidbody helicopterRigidbody;
     private float nextDropTime;
 
@@ -23,6 +27,12 @@ public class HelicopterBombDropper : MonoBehaviour
 
         if (currentBombs > maxBombs)
             currentBombs = maxBombs;
+
+        if (fuel == null)
+            fuel = GetComponent<VehicleFuel>();
+
+        if (fuel == null)
+            fuel = GetComponentInParent<VehicleFuel>();
     }
 
     private void Update()
@@ -53,6 +63,12 @@ public class HelicopterBombDropper : MonoBehaviour
         if (bombPrefab == null)
         {
             Debug.LogWarning("Bomb prefab is missing.");
+            return;
+        }
+
+        if (fuel != null && !fuel.UseFuel(fuelCostPerBomb))
+        {
+            Debug.Log("Not enough fuel to drop bomb.");
             return;
         }
 

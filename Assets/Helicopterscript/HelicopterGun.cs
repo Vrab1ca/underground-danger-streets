@@ -30,12 +30,22 @@ public class HelicopterGun : MonoBehaviour
     public ParticleSystem muzzleFlash;
     public GameObject impactEffect;
 
+    [Header("Fuel")]
+    public VehicleFuel fuel;
+    public float fuelCostPerShot = 0.08f;
+
     private float nextFireTime;
     private bool reloading;
 
     private void Awake()
     {
         ammoInMagazine = Mathf.Clamp(ammoInMagazine, 0, magazineSize);
+
+        if (fuel == null)
+            fuel = GetComponent<VehicleFuel>();
+
+        if (fuel == null)
+            fuel = GetComponentInParent<VehicleFuel>();
     }
 
     private void Update()
@@ -69,6 +79,12 @@ public class HelicopterGun : MonoBehaviour
         if (ammoInMagazine <= 0)
         {
             StartCoroutine(Reload());
+            return;
+        }
+
+        if (fuel != null && !fuel.UseFuel(fuelCostPerShot))
+        {
+            Debug.Log("No fuel to fire helicopter gun.");
             return;
         }
 

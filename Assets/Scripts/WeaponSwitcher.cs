@@ -29,19 +29,33 @@ public class WeaponSwitcher : MonoBehaviour
 
         int previousWeapon = selectedWeapon;
 
+        // Number keys still work
         if (Input.GetKeyDown(KeyCode.Alpha1))
             selectedWeapon = 0;
 
         if (Input.GetKeyDown(KeyCode.Alpha2))
             selectedWeapon = 1;
 
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        // IMPORTANT:
+        // If sniper is scoped, do NOT use scroll to change weapon.
+        // Scroll will be used only for sniper zoom.
+        Weapon activeWeapon = GetActiveWeapon();
 
-        if (scroll > 0f)
-            selectedWeapon++;
+        bool sniperIsZooming = false;
 
-        if (scroll < 0f)
-            selectedWeapon--;
+        if (activeWeapon != null && activeWeapon.IsSniperZooming())
+            sniperIsZooming = true;
+
+        if (!sniperIsZooming)
+        {
+            float scroll = Input.GetAxis("Mouse ScrollWheel");
+
+            if (scroll > 0f)
+                selectedWeapon++;
+
+            if (scroll < 0f)
+                selectedWeapon--;
+        }
 
         if (selectedWeapon >= transform.childCount)
             selectedWeapon = 0;
@@ -131,10 +145,8 @@ public class WeaponSwitcher : MonoBehaviour
             Quaternion.identity
         );
 
-        // Make sure dropped pickup is active
         droppedPickup.SetActive(true);
 
-        // Make sure radius pickup script has the correct weapon
         WeaponPickupBoxRadius pickupScript = droppedPickup.GetComponent<WeaponPickupBoxRadius>();
 
         if (pickupScript != null)

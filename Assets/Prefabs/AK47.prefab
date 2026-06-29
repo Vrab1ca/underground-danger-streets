@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 5841744582581872052}
   - component: {fileID: 2033153317016573788}
   - component: {fileID: 5768821711686915224}
+  - component: {fileID: 1615255892515505023}
   m_Layer: 0
   m_Name: AK47
   m_TagString: Untagged
@@ -114,6 +115,7 @@ MonoBehaviour:
   shootClip: {fileID: 0}
   reloadClip: {fileID: 0}
   animator: {fileID: 0}
+  shootEffect: {fileID: 1615255892515505023}
   damage: 18
   range: 120
   fireRate: 10
@@ -124,6 +126,7 @@ MonoBehaviour:
   ammoInMagazine: 30
   reserveAmmo: 120
   reloadTime: 1.7
+  debugMessages: 1
 --- !u!114 &5768821711686915224
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -143,3 +146,26 @@ MonoBehaviour:
   carCamera: {fileID: 0}
   hipFov: 60
   aimFov: 45
+--- !u!114 &1615255892515505023
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8613475388146901649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 569eb9565230651499103f42bc9f7d96, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponShootEffect
+  weaponTransform: {fileID: 1204361047830674557}
+  recoilPosition: {x: 0, y: 0, z: -0.08}
+  recoilRotation: {x: -6, y: 2, z: 0}
+  recoilBackSpeed: 40
+  recoilReturnSpeed: 20
+  useReloadSpin: 1
+  reloadSpinAxis: {x: 1, y: 0, z: 0}
+  reloadSpinDegrees: 360
+  reloadMovePosition: {x: 0, y: -0.08, z: -0.12}
+  muzzleFlash: {fileID: 0}
+  shootAudio: {fileID: 0}

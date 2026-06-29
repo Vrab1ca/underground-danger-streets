@@ -16,6 +16,12 @@ public class Weapon : MonoBehaviour
     public AudioClip shootClip;
     public AudioClip reloadClip;
     public Animator animator;
+    public WeaponShootEffect shootEffect;
+
+    [Header("Optional Scope UI")]
+    public GameObject scopeOverlay;
+    public GameObject normalCrosshairUI;
+    public GameObject weaponVisualRoot;
 
     [Header("Stats")]
     public float damage = 25f;
@@ -33,11 +39,37 @@ public class Weapon : MonoBehaviour
     public int reserveAmmo = 90;
     public float reloadTime = 1.5f;
 
+    [Header("Sniper Zoom")]
+    public bool enableSniperZoom = false;
+    public bool zoomToggleMode = true;
+    public float normalFOV = 60f;
+    public float[] zoomFOVs = { 35f, 20f, 10f };
+    public float zoomSpeed = 12f;
+    public float scopedSpread = 0f;
+    public bool hideWeaponWhenZoomed = true;
+
     [Header("Debug")]
     public bool debugMessages = true;
 
     private float nextFireTime;
     private bool reloading;
+
+    private bool isZoomed;
+    private int zoomIndex;
+    private Camera currentZoomCamera;
+
+    public bool IsZoomed
+    {
+        get
+        {
+            return isZoomed;
+        }
+    }
+
+    public bool IsSniperZooming()
+    {
+        return enableSniperZoom && isZoomed;
+    }
 
     public int AmmoInMagazine => ammoInMagazine;
     public int ReserveAmmo => reserveAmmo;
@@ -46,10 +78,29 @@ public class Weapon : MonoBehaviour
     private void Awake()
     {
         ammoInMagazine = Mathf.Clamp(ammoInMagazine, 0, magazineSize);
+
+        if (shootEffect == null)
+            shootEffect = GetComponent<WeaponShootEffect>();
+
+        if (shootEffect == null)
+            shootEffect = GetComponentInChildren<WeaponShootEffect>();
+
+        if (fpsCamera != null)
+            normalFOV = fpsCamera.fieldOfView;
+
+        ResetZoomInstant();
+    }
+
+    private void OnDisable()
+    {
+        ResetZoomInstant();
     }
 
     private void Update()
     {
+        HandleZoomInput();
+        SmoothZoom();
+
         if (reloading)
             return;
 
@@ -81,6 +132,125 @@ public class Weapon : MonoBehaviour
             Debug.Log(weaponName + " ammo added: " + amount);
     }
 
+    private void HandleZoomInput()
+    {
+        if (!enableSniperZoom)
+            return;
+
+        Camera shootCam = GetShootCamera();
+
+        if (shootCam == null)
+            return;
+
+        currentZoomCamera = shootCam;
+
+        if (zoomToggleMode)
+        {
+            if (Input.GetMouseButtonDown(1))
+            {
+                if (isZoomed)
+                    StopZoom();
+                else
+                    StartZoom();
+            }
+        }
+        else
+        {
+            if (Input.GetMouseButton(1))
+                StartZoom();
+            else
+                StopZoom();
+        }
+
+        if (!isZoomed)
+            return;
+
+        float scroll = Input.mouseScrollDelta.y;
+
+        if (scroll > 0f)
+        {
+            zoomIndex++;
+            zoomIndex = Mathf.Clamp(zoomIndex, 0, zoomFOVs.Length - 1);
+        }
+        else if (scroll < 0f)
+        {
+            zoomIndex--;
+            zoomIndex = Mathf.Clamp(zoomIndex, 0, zoomFOVs.Length - 1);
+        }
+    }
+
+    private void StartZoom()
+    {
+        isZoomed = true;
+
+        if (scopeOverlay != null)
+            scopeOverlay.SetActive(true);
+
+        if (normalCrosshairUI != null)
+            normalCrosshairUI.SetActive(false);
+
+        if (weaponVisualRoot != null && hideWeaponWhenZoomed)
+            weaponVisualRoot.SetActive(false);
+    }
+
+    private void StopZoom()
+    {
+        isZoomed = false;
+        zoomIndex = 0;
+
+        if (scopeOverlay != null)
+            scopeOverlay.SetActive(false);
+
+        if (normalCrosshairUI != null)
+            normalCrosshairUI.SetActive(true);
+
+        if (weaponVisualRoot != null)
+            weaponVisualRoot.SetActive(true);
+    }
+
+    private void SmoothZoom()
+    {
+        if (!enableSniperZoom)
+            return;
+
+        if (currentZoomCamera == null)
+            return;
+
+        float targetFOV = normalFOV;
+
+        if (isZoomed && zoomFOVs.Length > 0)
+        {
+            zoomIndex = Mathf.Clamp(zoomIndex, 0, zoomFOVs.Length - 1);
+            targetFOV = zoomFOVs[zoomIndex];
+        }
+
+        currentZoomCamera.fieldOfView = Mathf.Lerp(
+            currentZoomCamera.fieldOfView,
+            targetFOV,
+            zoomSpeed * Time.deltaTime
+        );
+    }
+
+    private void ResetZoomInstant()
+    {
+        isZoomed = false;
+        zoomIndex = 0;
+
+        Camera shootCam = GetShootCamera();
+
+        if (shootCam != null)
+            shootCam.fieldOfView = normalFOV;
+
+        if (scopeOverlay != null)
+            scopeOverlay.SetActive(false);
+
+        if (normalCrosshairUI != null)
+            normalCrosshairUI.SetActive(true);
+
+        if (weaponVisualRoot != null)
+            weaponVisualRoot.SetActive(true);
+    }
+
     private void Shoot()
     {
         Camera shootCam = GetShootCamera();
@@ -102,6 +272,9 @@ public class Weapon : MonoBehaviour
 
         ammoInMagazine--;
 
+        if (shootEffect != null)
+            shootEffect.PlayShootEffect();
+
         if (debugMessages)
             Debug.Log(weaponName + " fired. Ammo: " + ammoInMagazine + " / " + reserveAmmo);
 
@@ -114,12 +287,17 @@ public class Weapon : MonoBehaviour
         if (animator != null)
             animator.SetTrigger("Shoot");
 
+        float currentSpread = spread;
+
+        if (enableSniperZoom && isZoomed)
+            currentSpread = scopedSpread;
+
         for (int i = 0; i < pellets; i++)
         {
             Vector3 direction = shootCam.transform.forward;
 
-            direction += shootCam.transform.right * Random.Range(-spread, spread);
-            direction += shootCam.transform.up * Random.Range(-spread, spread);
+            direction += shootCam.transform.right * Random.Range(-currentSpread, currentSpread);
+            direction += shootCam.transform.up * Random.Range(-currentSpread, currentSpread);
             direction.Normalize();
 
             Debug.DrawRay(shootCam.transform.position, direction * range, Color.red, 1f);
@@ -137,7 +315,6 @@ public class Weapon : MonoBehaviour
 
             foreach (RaycastHit hit in hits)
             {
-                // Ignore player and held weapon
                 if (hit.collider.transform.IsChildOf(transform.root))
                     continue;
 
@@ -175,6 +352,8 @@ public class Weapon : MonoBehaviour
         if (ammoInMagazine >= magazineSize || reserveAmmo <= 0)
             yield break;
 
+        StopZoom();
+
         reloading = true;
 
         if (animator != null)
@@ -182,6 +361,9 @@ public class Weapon : MonoBehaviour
 
         if (audioSource != null && reloadClip != null)
             audioSource.PlayOneShot(reloadClip);
+
+        if (shootEffect != null)
+            shootEffect.PlayReloadSpin(reloadTime);
 
         yield return new WaitForSeconds(reloadTime);
 

@@ -14,18 +14,24 @@ public class PlayerMotor : MonoBehaviour
     public float standingHeight = 2f;
     public float crouchHeight = 1f;
 
+    [Header("Stamina")]
+    public PlayerStamina stamina;
+
     private CharacterController controller;
     private Vector3 velocity;
 
     public bool IsGrounded => controller != null && controller.enabled && controller.isGrounded;
 
-    void Awake()
+    private void Awake()
     {
         controller = GetComponent<CharacterController>();
         standingHeight = controller.height;
+
+        if (stamina == null)
+            stamina = GetComponent<PlayerStamina>();
     }
 
-    void Update()
+    private void Update()
     {
         if (controller == null || !controller.enabled || !gameObject.activeInHierarchy)
             return;
@@ -38,17 +44,40 @@ public class PlayerMotor : MonoBehaviour
         float x = Input.GetAxis("Horizontal");
         float z = Input.GetAxis("Vertical");
 
-        bool sprint = Input.GetKey(KeyCode.LeftShift);
         bool crouch = Input.GetKey(KeyCode.LeftControl);
-
-        float speed = crouch ? crouchSpeed : (sprint ? sprintSpeed : walkSpeed);
+        bool wantsSprint = Input.GetKey(KeyCode.LeftShift);
 
         Vector3 move = transform.right * x + transform.forward * z;
+
+        if (move.magnitude > 1f)
+            move.Normalize();
+
+        bool isMoving = move.magnitude > 0.1f;
+
+        float speed = walkSpeed;
+
+        if (crouch)
+        {
+            speed = crouchSpeed;
+        }
+        else if (wantsSprint && isMoving && stamina != null && stamina.CanRun())
+        {
+            speed = sprintSpeed;
+            stamina.UseRunStamina();
+        }
+        else
+        {
+            speed = walkSpeed;
+        }
+
         controller.Move(move * speed * Time.deltaTime);
 
         if (Input.GetButtonDown("Jump") && grounded && !crouch)
         {
-            velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            if (stamina == null || stamina.TryUseJumpStamina())
+            {
+                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            }
         }
 
         controller.height = Mathf.Lerp(

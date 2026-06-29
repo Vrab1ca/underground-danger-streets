@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 9111510667268357501}
   - component: {fileID: 1739604050479071288}
   - component: {fileID: 3175004474094664918}
+  - component: {fileID: 2676900085107760458}
   m_Layer: 0
   m_Name: Glock
   m_TagString: Untagged
@@ -136,6 +137,7 @@ MonoBehaviour:
   shootClip: {fileID: 0}
   reloadClip: {fileID: 0}
   animator: {fileID: 0}
+  shootEffect: {fileID: 0}
   damage: 20
   range: 80
   fireRate: 4
@@ -146,7 +148,7 @@ MonoBehaviour:
   ammoInMagazine: 12
   reserveAmmo: 48
   reloadTime: 1.2
-  showDebugRay: 1
+  debugMessages: 1
 --- !u!114 &3175004474094664918
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -166,3 +168,26 @@ MonoBehaviour:
   carCamera: {fileID: 0}
   hipFov: 60
   aimFov: 45
+--- !u!114 &2676900085107760458
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2311427329042194736}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 569eb9565230651499103f42bc9f7d96, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WeaponShootEffect
+  weaponTransform: {fileID: 2672014783669479981}
+  recoilPosition: {x: 0, y: 0, z: -0.08}
+  recoilRotation: {x: -6, y: 2, z: 0}
+  recoilBackSpeed: 25
+  recoilReturnSpeed: 12
+  useReloadSpin: 1
+  reloadSpinAxis: {x: 0, y: 0, z: 1}
+  reloadSpinDegrees: 360
+  reloadMovePosition: {x: 0, y: -0.08, z: -0.12}
+  muzzleFlash: {fileID: 0}
+  shootAudio: {fileID: 0}

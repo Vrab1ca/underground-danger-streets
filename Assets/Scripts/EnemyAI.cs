@@ -101,6 +101,10 @@ public class EnemyAI : MonoBehaviour, IDamageable
 
         currentHealth -= amount;
 
+        HitFlash flash = GetComponent<HitFlash>();
+        if (flash != null)
+            flash.Flash();
+
         Debug.Log(gameObject.name + " took damage: " + amount + " HP left: " + currentHealth);
 
         state = State.Chase;
