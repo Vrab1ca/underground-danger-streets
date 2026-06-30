@@ -5,19 +5,57 @@ public class GrenadePickupBox : MonoBehaviour
     [Header("Pickup")]
     public GrenadeType grenadeType = GrenadeType.Normal;
     public int amount = 1;
+    public KeyCode pickupKey = KeyCode.F;
+    public float pickupDistance = 3f;
 
-    private void OnTriggerEnter(Collider other)
+    [Header("Destroy")]
+    public bool destroyAfterPickup = true;
+
+    private PlayerGrenadeInventory inventory;
+    private Transform player;
+
+    private void Start()
     {
-        PlayerGrenadeInventory inventory = other.GetComponentInParent<PlayerGrenadeInventory>();
+        inventory = FindFirstObjectByType<PlayerGrenadeInventory>();
 
-        if (inventory == null)
-            inventory = other.GetComponentInChildren<PlayerGrenadeInventory>();
+        if (inventory != null)
+            player = inventory.transform;
+    }
 
-        if (inventory == null)
+    private void Update()
+    {
+        if (inventory == null || player == null)
             return;
 
-        inventory.AddGrenades(grenadeType, amount);
+        float distance = Vector3.Distance(transform.position, player.position);
 
-        Destroy(gameObject);
+        if (distance > pickupDistance)
+            return;
+
+        if (Input.GetKeyDown(pickupKey))
+        {
+            PickupGrenades();
+        }
+    }
+
+    private void PickupGrenades()
+    {
+        int before = inventory.GetGrenadeCount(grenadeType);
+
+        inventory.AddGrenade(grenadeType, amount);
+
+        int after = inventory.GetGrenadeCount(grenadeType);
+
+        if (after > before)
+        {
+            Debug.Log("Picked up " + amount + " " + grenadeType + ". Now: " + after);
+
+            if (destroyAfterPickup)
+                Destroy(gameObject);
+        }
+        else
+        {
+            Debug.Log("Cannot pick up " + grenadeType + ". Inventory full.");
+        }
     }
 }

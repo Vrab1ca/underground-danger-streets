@@ -30,12 +30,7 @@ public class PlayerLookInfo : MonoBehaviour
         if (playerCamera == null)
             playerCamera = Camera.main;
 
-        if (lookInfoCanvasGroup != null)
-        {
-            lookInfoCanvasGroup.alpha = 0f;
-            lookInfoCanvasGroup.interactable = false;
-            lookInfoCanvasGroup.blocksRaycasts = false;
-        }
+        HideInstant();
     }
 
     private void Update()
@@ -90,9 +85,7 @@ public class PlayerLookInfo : MonoBehaviour
         if (lookInfoCanvasGroup == null)
             return;
 
-        bool shouldShow = currentInfo != null;
-
-        if (shouldShow)
+        if (currentInfo != null)
         {
             if (titleText != null)
                 titleText.text = currentInfo.objectName;
@@ -122,5 +115,23 @@ public class PlayerLookInfo : MonoBehaviour
             0f,
             fadeOutSpeed * Time.deltaTime
         );
+    }
+
+    public void HideInstant()
+    {
+        currentInfo = null;
+
+        if (lookInfoCanvasGroup != null)
+        {
+            lookInfoCanvasGroup.alpha = 0f;
+            lookInfoCanvasGroup.interactable = false;
+            lookInfoCanvasGroup.blocksRaycasts = false;
+        }
+
+        if (titleText != null)
+            titleText.text = "";
+
+        if (descriptionText != null)
+            descriptionText.text = "";
     }
 }

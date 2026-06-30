@@ -71,6 +71,11 @@ public class HelicopterEnterExit : MonoBehaviour
     {
         PlayerInside = true;
 
+        PlayerLookInfo lookInfo = player.GetComponent<PlayerLookInfo>();
+
+        if (lookInfo != null)
+            lookInfo.HideInstant();
+
         if (characterController != null)
             characterController.enabled = false;
 

@@ -8,69 +8,72 @@ public class PlayerGrenadeInventory : MonoBehaviour
 
     [Header("Grenade Prefabs")]
     public GameObject normalGrenadePrefab;
-    public GameObject molotovGrenadePrefab;
+    public GameObject molotovPrefab;
 
-    [Header("Inventory")]
+    [Header("Normal Grenades")]
+    public int normalGrenades = 3;
     public int maxNormalGrenades = 3;
-    public int normalGrenades = 0;
 
-    public int maxMolotovs = 3;
-    public int molotovs = 0;
+    [Header("Molotovs")]
+    public int molotovs = 2;
+    public int maxMolotovs = 2;
+
+    [Header("Selected Grenade")]
+    public GrenadeType selectedGrenade = GrenadeType.Normal;
 
     [Header("Throw Settings")]
-    public KeyCode throwKey = KeyCode.Q;
-    public KeyCode switchKey = KeyCode.Z;
-    public float throwForce = 16f;
+    public float throwForce = 18f;
     public float upwardForce = 2f;
 
-    [Header("Selected")]
-    public GrenadeType selectedGrenade = GrenadeType.Normal;
+    [Header("Old Controls Optional")]
+    public bool useOldQZControls = false;
+    public KeyCode oldThrowKey = KeyCode.Q;
+    public KeyCode oldSwitchKey = KeyCode.Z;
 
     private void Start()
     {
         if (playerCamera == null)
             playerCamera = Camera.main;
 
-        normalGrenades = Mathf.Clamp(normalGrenades, 0, maxNormalGrenades);
-        molotovs = Mathf.Clamp(molotovs, 0, maxMolotovs);
+        ClampGrenades();
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(switchKey))
-        {
-            SwitchGrenade();
-        }
+        if (!useOldQZControls)
+            return;
 
-        if (Input.GetKeyDown(throwKey))
-        {
-            ThrowGrenade();
-        }
+        if (Input.GetKeyDown(oldSwitchKey))
+            NextGrenade();
+
+        if (Input.GetKeyDown(oldThrowKey))
+            ThrowSelectedGrenade();
     }
 
-    public void AddGrenades(GrenadeType type, int amount)
+    private void OnValidate()
     {
-        if (type == GrenadeType.Normal)
-        {
-            normalGrenades += amount;
-
-            if (normalGrenades > maxNormalGrenades)
-                normalGrenades = maxNormalGrenades;
-
-            Debug.Log("Normal grenades: " + normalGrenades + " / " + maxNormalGrenades);
-        }
-        else if (type == GrenadeType.Molotov)
-        {
-            molotovs += amount;
-
-            if (molotovs > maxMolotovs)
-                molotovs = maxMolotovs;
-
-            Debug.Log("Molotovs: " + molotovs + " / " + maxMolotovs);
-        }
+        ClampGrenades();
     }
 
-    private void SwitchGrenade()
+    private void ClampGrenades()
+    {
+        normalGrenades = Mathf.Clamp(normalGrenades, 0, maxNormalGrenades);
+        molotovs = Mathf.Clamp(molotovs, 0, maxMolotovs);
+    }
+
+    public void SelectNormalGrenade()
+    {
+        selectedGrenade = GrenadeType.Normal;
+        Debug.Log("Selected Normal Grenade");
+    }
+
+    public void SelectMolotov()
+    {
+        selectedGrenade = GrenadeType.Molotov;
+        Debug.Log("Selected Molotov");
+    }
+
+    public void NextGrenade()
     {
         if (selectedGrenade == GrenadeType.Normal)
             selectedGrenade = GrenadeType.Molotov;
@@ -80,78 +83,144 @@ public class PlayerGrenadeInventory : MonoBehaviour
         Debug.Log("Selected grenade: " + selectedGrenade);
     }
 
-    private void ThrowGrenade()
+    public void PreviousGrenade()
     {
-        GameObject prefabToThrow = null;
+        NextGrenade();
+    }
 
+    public void ThrowSelectedGrenade()
+    {
         if (selectedGrenade == GrenadeType.Normal)
         {
-            if (normalGrenades <= 0)
-            {
-                Debug.Log("No normal grenades.");
-                return;
-            }
-
-            prefabToThrow = normalGrenadePrefab;
-        }
-        else if (selectedGrenade == GrenadeType.Molotov)
-        {
-            if (molotovs <= 0)
-            {
-                Debug.Log("No molotovs.");
-                return;
-            }
-
-            prefabToThrow = molotovGrenadePrefab;
-        }
-
-        if (prefabToThrow == null)
-        {
-            Debug.LogWarning("Grenade prefab is missing.");
+            ThrowNormalGrenade();
             return;
         }
 
-        Vector3 spawnPosition;
+        if (selectedGrenade == GrenadeType.Molotov)
+        {
+            ThrowMolotov();
+            return;
+        }
+    }
 
-        if (throwPoint != null)
-            spawnPosition = throwPoint.position;
-        else
-            spawnPosition = transform.position + transform.forward * 1f + Vector3.up * 1f;
+    public void ThrowNormalGrenade()
+    {
+        if (normalGrenades <= 0)
+        {
+            Debug.Log("No normal grenades.");
+            return;
+        }
 
-        GameObject grenadeObject = Instantiate(
-            prefabToThrow,
-            spawnPosition,
-            Quaternion.identity
+        if (normalGrenadePrefab == null)
+        {
+            Debug.LogWarning("Normal Grenade Prefab is missing.");
+            return;
+        }
+
+        ThrowGrenadePrefab(normalGrenadePrefab);
+        normalGrenades--;
+
+        Debug.Log("Threw Normal Grenade. Left: " + normalGrenades);
+    }
+
+    public void ThrowMolotov()
+    {
+        if (molotovs <= 0)
+        {
+            Debug.Log("No molotovs.");
+            return;
+        }
+
+        if (molotovPrefab == null)
+        {
+            Debug.LogWarning("Molotov Prefab is missing.");
+            return;
+        }
+
+        ThrowGrenadePrefab(molotovPrefab);
+        molotovs--;
+
+        Debug.Log("Threw Molotov. Left: " + molotovs);
+    }
+
+    private void ThrowGrenadePrefab(GameObject grenadePrefab)
+    {
+        Transform spawnPoint = throwPoint;
+
+        if (spawnPoint == null && playerCamera != null)
+            spawnPoint = playerCamera.transform;
+
+        if (spawnPoint == null)
+        {
+            Debug.LogWarning("No ThrowPoint or Camera found.");
+            return;
+        }
+
+        GameObject grenade = Instantiate(
+            grenadePrefab,
+            spawnPoint.position,
+            spawnPoint.rotation
         );
 
-        GrenadeProjectile projectile = grenadeObject.GetComponent<GrenadeProjectile>();
-
-        if (projectile != null)
-            projectile.SetOwner(transform);
-
-        Rigidbody rb = grenadeObject.GetComponent<Rigidbody>();
+        Rigidbody rb = grenade.GetComponent<Rigidbody>();
 
         if (rb != null)
         {
-            Vector3 direction;
+            Vector3 forceDirection = spawnPoint.forward * throwForce;
+            forceDirection += Vector3.up * upwardForce;
 
-            if (playerCamera != null)
-                direction = playerCamera.transform.forward;
-            else
-                direction = transform.forward;
+            rb.AddForce(forceDirection, ForceMode.Impulse);
+        }
+    }
 
-            Vector3 force = direction * throwForce + Vector3.up * upwardForce;
+    public void AddGrenade(GrenadeType type, int amount)
+    {
+        if (type == GrenadeType.Normal)
+        {
+            normalGrenades += amount;
 
-            rb.AddForce(force, ForceMode.Impulse);
-            rb.AddTorque(Random.insideUnitSphere * 5f, ForceMode.Impulse);
+            if (normalGrenades > maxNormalGrenades)
+                normalGrenades = maxNormalGrenades;
         }
 
-        if (selectedGrenade == GrenadeType.Normal)
-            normalGrenades--;
+        if (type == GrenadeType.Molotov)
+        {
+            molotovs += amount;
 
-        else if (selectedGrenade == GrenadeType.Molotov)
-            molotovs--;
+            if (molotovs > maxMolotovs)
+                molotovs = maxMolotovs;
+        }
+    }
 
-        Debug.Log("Thrown grenade: " + selectedGrenade);
+    public void AddGrenades(GrenadeType type, int amount)
+    {
+        AddGrenade(type, amount);
+    }
+
+    public void AddNormalGrenades(int amount)
+    {
+        normalGrenades += amount;
+
+        if (normalGrenades > maxNormalGrenades)
+            normalGrenades = maxNormalGrenades;
+    }
+
+    public void AddMolotovs(int amount)
+    {
+        molotovs += amount;
+
+        if (molotovs > maxMolotovs)
+            molotovs = maxMolotovs;
+    }
+
+    public int GetGrenadeCount(GrenadeType type)
+    {
+        if (type == GrenadeType.Normal)
+            return normalGrenades;
+
+        if (type == GrenadeType.Molotov)
+            return molotovs;
+
+        return 0;
     }
 }

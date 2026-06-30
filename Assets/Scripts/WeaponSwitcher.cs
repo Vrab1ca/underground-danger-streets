@@ -2,69 +2,190 @@ using UnityEngine;
 
 public class WeaponSwitcher : MonoBehaviour
 {
+    public enum QuickSlot
+    {
+        Weapon1,
+        Weapon2,
+        NormalGrenade,
+        Molotov
+    }
+
+    [Header("Selected Slot")]
+    public QuickSlot selectedSlot = QuickSlot.Weapon1;
+
     [Header("Inventory")]
-    public int selectedWeapon = 0;
     public int maxWeapons = 2;
 
     [Header("Camera References")]
     public Camera fpsCamera;
     public Camera carCamera;
 
+    [Header("Sniper Scope UI")]
+    public GameObject scopeOverlay;
+    public GameObject normalCrosshairUI;
+
+    [Header("Grenade System")]
+    public PlayerGrenadeInventory grenadeInventory;
+    public GameObject normalGrenadeVisual;
+    public GameObject molotovVisual;
+
     [Header("Drop")]
     public Transform dropPoint;
     public KeyCode dropKey = KeyCode.G;
 
+    private int selectedWeaponIndex = 0;
+
     private void Start()
     {
-        SelectWeapon();
+        SelectSlot(QuickSlot.Weapon1);
     }
 
     private void Update()
     {
+        HandleNumberKeys();
+        HandleScroll();
+
         if (Input.GetKeyDown(dropKey))
-            DropCurrentWeapon();
-
-        if (transform.childCount == 0)
-            return;
-
-        int previousWeapon = selectedWeapon;
-
-        // Number keys still work
-        if (Input.GetKeyDown(KeyCode.Alpha1))
-            selectedWeapon = 0;
-
-        if (Input.GetKeyDown(KeyCode.Alpha2))
-            selectedWeapon = 1;
-
-        // IMPORTANT:
-        // If sniper is scoped, do NOT use scroll to change weapon.
-        // Scroll will be used only for sniper zoom.
-        Weapon activeWeapon = GetActiveWeapon();
-
-        bool sniperIsZooming = false;
-
-        if (activeWeapon != null && activeWeapon.IsSniperZooming())
-            sniperIsZooming = true;
-
-        if (!sniperIsZooming)
         {
-            float scroll = Input.GetAxis("Mouse ScrollWheel");
-
-            if (scroll > 0f)
-                selectedWeapon++;
-
-            if (scroll < 0f)
-                selectedWeapon--;
+            if (IsWeaponSlot())
+                DropCurrentWeapon();
         }
 
-        if (selectedWeapon >= transform.childCount)
-            selectedWeapon = 0;
+        HandleUseSelectedItem();
+    }
 
-        if (selectedWeapon < 0)
-            selectedWeapon = transform.childCount - 1;
+    private void HandleNumberKeys()
+    {
+        if (Input.GetKeyDown(KeyCode.Alpha1))
+            SelectSlot(QuickSlot.Weapon1);
 
-        if (previousWeapon != selectedWeapon)
-            SelectWeapon();
+        if (Input.GetKeyDown(KeyCode.Alpha2))
+            SelectSlot(QuickSlot.Weapon2);
+
+        if (Input.GetKeyDown(KeyCode.Alpha3))
+            SelectSlot(QuickSlot.NormalGrenade);
+
+        if (Input.GetKeyDown(KeyCode.Alpha4))
+            SelectSlot(QuickSlot.Molotov);
+    }
+
+    private void HandleScroll()
+    {
+        Weapon activeWeapon = GetActiveWeapon();
+
+        if (activeWeapon != null && activeWeapon.IsSniperZooming())
+            return;
+
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+
+        if (scroll > 0f)
+            NextSlot();
+
+        if (scroll < 0f)
+            PreviousSlot();
+    }
+
+    private void NextSlot()
+    {
+        int slot = (int)selectedSlot;
+        slot++;
+
+        if (slot > 3)
+            slot = 0;
+
+        SelectSlot((QuickSlot)slot);
+    }
+
+    private void PreviousSlot()
+    {
+        int slot = (int)selectedSlot;
+        slot--;
+
+        if (slot < 0)
+            slot = 3;
+
+        SelectSlot((QuickSlot)slot);
+    }
+
+    public void SelectSlot(QuickSlot slot)
+    {
+        selectedSlot = slot;
+
+        if (slot == QuickSlot.Weapon1)
+            selectedWeaponIndex = 0;
+
+        if (slot == QuickSlot.Weapon2)
+            selectedWeaponIndex = 1;
+
+        if (slot == QuickSlot.NormalGrenade && grenadeInventory != null)
+            grenadeInventory.SelectNormalGrenade();
+
+        if (slot == QuickSlot.Molotov && grenadeInventory != null)
+            grenadeInventory.SelectMolotov();
+
+        UpdateWeaponVisibility();
+        UpdateGrenadeVisuals();
+
+        Debug.Log("Selected slot: " + selectedSlot);
+    }
+
+    private void UpdateWeaponVisibility()
+    {
+        Weapon[] weapons = GetWeapons();
+
+        for (int i = 0; i < weapons.Length; i++)
+        {
+            if (weapons[i] == null)
+                continue;
+
+            bool shouldShow =
+                IsWeaponSlot() &&
+                i == selectedWeaponIndex;
+
+            weapons[i].gameObject.SetActive(shouldShow);
+        }
+    }
+
+    private void UpdateGrenadeVisuals()
+    {
+        if (normalGrenadeVisual != null)
+            normalGrenadeVisual.SetActive(selectedSlot == QuickSlot.NormalGrenade);
+
+        if (molotovVisual != null)
+            molotovVisual.SetActive(selectedSlot == QuickSlot.Molotov);
+    }
+
+    private void HandleUseSelectedItem()
+    {
+        if (!Input.GetMouseButtonDown(0))
+            return;
+
+        if (selectedSlot == QuickSlot.NormalGrenade)
+        {
+            if (grenadeInventory != null)
+            {
+                grenadeInventory.SelectNormalGrenade();
+                grenadeInventory.ThrowSelectedGrenade();
+            }
+
+            return;
+        }
+
+        if (selectedSlot == QuickSlot.Molotov)
+        {
+            if (grenadeInventory != null)
+            {
+                grenadeInventory.SelectMolotov();
+                grenadeInventory.ThrowSelectedGrenade();
+            }
+
+            return;
+        }
+    }
+
+    private bool IsWeaponSlot()
+    {
+        return selectedSlot == QuickSlot.Weapon1 || selectedSlot == QuickSlot.Weapon2;
     }
 
     public bool AddWeapon(GameObject weaponPrefab)
@@ -75,7 +196,9 @@ public class WeaponSwitcher : MonoBehaviour
             return false;
         }
 
-        if (transform.childCount >= maxWeapons)
+        int weaponCount = GetWeaponCount();
+
+        if (weaponCount >= maxWeapons)
         {
             Debug.LogWarning("Inventory full. You can carry only 2 weapons. Press G to drop one.");
             return false;
@@ -89,8 +212,12 @@ public class WeaponSwitcher : MonoBehaviour
 
         PrepareWeapon(newWeapon);
 
-        selectedWeapon = transform.childCount - 1;
-        SelectWeapon();
+        int newWeaponIndex = GetWeaponCount() - 1;
+
+        if (newWeaponIndex <= 0)
+            SelectSlot(QuickSlot.Weapon1);
+        else
+            SelectSlot(QuickSlot.Weapon2);
 
         Debug.Log("Picked weapon: " + newWeapon.name);
 
@@ -105,6 +232,9 @@ public class WeaponSwitcher : MonoBehaviour
         {
             weapon.fpsCamera = fpsCamera;
             weapon.carCamera = carCamera;
+
+            weapon.scopeOverlay = scopeOverlay;
+            weapon.normalCrosshairUI = normalCrosshairUI;
         }
 
         SimpleADS ads = weaponObject.GetComponent<SimpleADS>();
@@ -159,32 +289,46 @@ public class WeaponSwitcher : MonoBehaviour
 
         Destroy(activeWeapon.gameObject);
 
-        selectedWeapon = 0;
-
-        Invoke(nameof(SelectWeapon), 0.05f);
-    }
-
-    public void SelectWeapon()
-    {
-        if (transform.childCount == 0)
-            return;
-
-        selectedWeapon = Mathf.Clamp(selectedWeapon, 0, transform.childCount - 1);
-
-        for (int i = 0; i < transform.childCount; i++)
-        {
-            bool active = i == selectedWeapon;
-            transform.GetChild(i).gameObject.SetActive(active);
-        }
+        selectedWeaponIndex = 0;
+        SelectSlot(QuickSlot.Weapon1);
     }
 
     public Weapon GetActiveWeapon()
     {
-        if (transform.childCount == 0)
+        if (!IsWeaponSlot())
             return null;
 
-        selectedWeapon = Mathf.Clamp(selectedWeapon, 0, transform.childCount - 1);
+        Weapon[] weapons = GetWeapons();
 
-        return transform.GetChild(selectedWeapon).GetComponent<Weapon>();
+        if (weapons.Length == 0)
+            return null;
+
+        if (selectedWeaponIndex < 0)
+            selectedWeaponIndex = 0;
+
+        if (selectedWeaponIndex >= weapons.Length)
+            selectedWeaponIndex = weapons.Length - 1;
+
+        return weapons[selectedWeaponIndex];
+    }
+
+    private int GetWeaponCount()
+    {
+        return GetWeapons().Length;
+    }
+
+    private Weapon[] GetWeapons()
+    {
+        System.Collections.Generic.List<Weapon> weapons = new System.Collections.Generic.List<Weapon>();
+
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Weapon weapon = transform.GetChild(i).GetComponent<Weapon>();
+
+            if (weapon != null)
+                weapons.Add(weapon);
+        }
+
+        return weapons.ToArray();
     }
 }

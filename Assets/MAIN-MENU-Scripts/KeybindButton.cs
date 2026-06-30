@@ -16,17 +16,26 @@ public class KeybindButton : MonoBehaviour
     private bool waitingForKey;
     private int startFrame;
 
-    private void Awake()
+    private void Start()
     {
-        if (button == null)
-            button = GetComponent<Button>();
+        AutoFindReferences();
 
         if (button != null)
+        {
+            button.onClick.RemoveListener(StartRebind);
             button.onClick.AddListener(StartRebind);
+        }
+        else
+        {
+            Debug.LogWarning(gameObject.name + " has no Button component.");
+        }
+
+        Refresh();
     }
 
     private void OnEnable()
     {
+        AutoFindReferences();
         Refresh();
     }
 
@@ -35,11 +44,7 @@ public class KeybindButton : MonoBehaviour
         if (!waitingForKey)
             return;
 
-        // This prevents the button click from instantly binding Mouse0
         if (Time.frameCount == startFrame)
-            return;
-
-        if (!Input.anyKeyDown)
             return;
 
         KeyCode pressedKey = GetPressedKey();
@@ -51,6 +56,28 @@ public class KeybindButton : MonoBehaviour
 
         waitingForKey = false;
         Refresh();
+
+        Debug.Log("Changed key: " + action + " = " + pressedKey);
+    }
+
+    private void AutoFindReferences()
+    {
+        if (button == null)
+            button = GetComponent<Button>();
+
+        if (button == null)
+            button = GetComponentInChildren<Button>(true);
+
+        TMP_Text[] texts = GetComponentsInChildren<TMP_Text>(true);
+
+        foreach (TMP_Text text in texts)
+        {
+            if (text.name == "ActionText")
+                actionText = text;
+
+            if (text.name == "KeyText")
+                keyText = text;
+        }
     }
 
     public void StartRebind()
@@ -59,7 +86,9 @@ public class KeybindButton : MonoBehaviour
         startFrame = Time.frameCount;
 
         if (keyText != null)
-            keyText.text = "Press key...";
+            keyText.text = "PRESS KEY...";
+
+        Debug.Log("Waiting for new key for: " + action);
     }
 
     public void Refresh()
@@ -78,8 +107,22 @@ public class KeybindButton : MonoBehaviour
 
     private KeyCode GetPressedKey()
     {
+        // Mouse buttons
+        if (Input.GetKeyDown(KeyCode.Mouse0))
+            return KeyCode.Mouse0;
+
+        if (Input.GetKeyDown(KeyCode.Mouse1))
+            return KeyCode.Mouse1;
+
+        if (Input.GetKeyDown(KeyCode.Mouse2))
+            return KeyCode.Mouse2;
+
+        // Keyboard
         foreach (KeyCode keyCode in System.Enum.GetValues(typeof(KeyCode)))
         {
+            if (keyCode == KeyCode.Mouse0 || keyCode == KeyCode.Mouse1 || keyCode == KeyCode.Mouse2)
+                continue;
+
             if (Input.GetKeyDown(keyCode))
                 return keyCode;
         }
