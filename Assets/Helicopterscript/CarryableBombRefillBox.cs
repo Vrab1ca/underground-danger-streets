@@ -11,13 +11,11 @@ public class CarryableBombRefillBox : MonoBehaviour
 
     private Rigidbody rb;
     private Collider[] colliders;
-    private Transform originalParent;
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         colliders = GetComponentsInChildren<Collider>();
-        originalParent = transform.parent;
     }
 
     public void PickUp(Transform carryPoint)
@@ -35,7 +33,8 @@ public class CarryableBombRefillBox : MonoBehaviour
 
         foreach (Collider col in colliders)
         {
-            col.enabled = false;
+            if (col != null)
+                col.enabled = false;
         }
 
         transform.SetParent(carryPoint);
@@ -49,11 +48,12 @@ public class CarryableBombRefillBox : MonoBehaviour
     {
         isHeld = false;
 
-        transform.SetParent(originalParent);
+        transform.SetParent(null);
 
         foreach (Collider col in colliders)
         {
-            col.enabled = true;
+            if (col != null)
+                col.enabled = true;
         }
 
         rb.isKinematic = false;

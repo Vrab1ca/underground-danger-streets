@@ -6,7 +6,6 @@ public class KeybindButton : MonoBehaviour
 {
     [Header("Action")]
     public GameAction action;
-    public string actionDisplayName;
 
     [Header("UI")]
     public TMP_Text actionText;
@@ -16,18 +15,14 @@ public class KeybindButton : MonoBehaviour
     private bool waitingForKey;
     private int startFrame;
 
-    private void Start()
+    private void Awake()
     {
-        AutoFindReferences();
+        AutoFind();
 
         if (button != null)
         {
             button.onClick.RemoveListener(StartRebind);
             button.onClick.AddListener(StartRebind);
-        }
-        else
-        {
-            Debug.LogWarning(gameObject.name + " has no Button component.");
         }
 
         Refresh();
@@ -35,7 +30,7 @@ public class KeybindButton : MonoBehaviour
 
     private void OnEnable()
     {
-        AutoFindReferences();
+        AutoFind();
         Refresh();
     }
 
@@ -56,17 +51,12 @@ public class KeybindButton : MonoBehaviour
 
         waitingForKey = false;
         Refresh();
-
-        Debug.Log("Changed key: " + action + " = " + pressedKey);
     }
 
-    private void AutoFindReferences()
+    private void AutoFind()
     {
         if (button == null)
             button = GetComponent<Button>();
-
-        if (button == null)
-            button = GetComponentInChildren<Button>(true);
 
         TMP_Text[] texts = GetComponentsInChildren<TMP_Text>(true);
 
@@ -88,18 +78,13 @@ public class KeybindButton : MonoBehaviour
         if (keyText != null)
             keyText.text = "PRESS KEY...";
 
-        Debug.Log("Waiting for new key for: " + action);
+        Debug.Log("Waiting for key: " + action);
     }
 
     public void Refresh()
     {
         if (actionText != null)
-        {
-            if (string.IsNullOrEmpty(actionDisplayName))
-                actionText.text = action.ToString();
-            else
-                actionText.text = actionDisplayName;
-        }
+            actionText.text = GameKeybinds.GetActionName(action);
 
         if (keyText != null)
             keyText.text = GameKeybinds.GetKeyName(action);
@@ -107,7 +92,6 @@ public class KeybindButton : MonoBehaviour
 
     private KeyCode GetPressedKey()
     {
-        // Mouse buttons
         if (Input.GetKeyDown(KeyCode.Mouse0))
             return KeyCode.Mouse0;
 
@@ -117,7 +101,6 @@ public class KeybindButton : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Mouse2))
             return KeyCode.Mouse2;
 
-        // Keyboard
         foreach (KeyCode keyCode in System.Enum.GetValues(typeof(KeyCode)))
         {
             if (keyCode == KeyCode.Mouse0 || keyCode == KeyCode.Mouse1 || keyCode == KeyCode.Mouse2)

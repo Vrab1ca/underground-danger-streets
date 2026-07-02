@@ -117,17 +117,11 @@ public class EnemyAI : MonoBehaviour, IDamageable
     {
         state = State.Dead;
 
-        if (agent != null)
-            agent.isStopped = true;
+        ZombieDeathExplosion explosion = GetComponent<ZombieDeathExplosion>();
 
-        Collider col = GetComponent<Collider>();
+        if (explosion != null)
+            explosion.Explode();
 
-        if (col != null)
-            col.enabled = false;
-
-        if (animator != null)
-            animator.SetTrigger("Die");
-
-        Destroy(gameObject, 3f);
+        Destroy(gameObject);
     }
 }

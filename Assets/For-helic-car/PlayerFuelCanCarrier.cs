@@ -6,6 +6,12 @@ public class PlayerFuelCanCarrier : MonoBehaviour
     public Camera playerCamera;
     public Transform carryPoint;
 
+    [Header("Disable Combat While Carrying")]
+    public GameObject weaponHolder;
+    public WeaponSwitcher weaponSwitcher;
+    public PlayerGrenadeInventory grenadeInventory;
+    public JumpPlatformInventory jumpPlatformInventory;
+
     [Header("Keys")]
     public KeyCode pickupKey = KeyCode.F;
     public KeyCode refuelKey = KeyCode.F;
@@ -33,6 +39,9 @@ public class PlayerFuelCanCarrier : MonoBehaviour
     public float refuelWobbleAmount = 6f;
     public float refuelWobbleSpeed = 8f;
 
+    [Header("Drop")]
+    public float dropForwardForce = 2f;
+
     [Header("Debug")]
     public bool debugMessages = true;
 
@@ -59,6 +68,9 @@ public class PlayerFuelCanCarrier : MonoBehaviour
 
             return;
         }
+
+        // While fuel can is in hand, always disable weapons/grenades/platforms
+        DisableCombat();
 
         if (Input.GetKeyDown(dropKey))
         {
@@ -158,8 +170,10 @@ public class PlayerFuelCanCarrier : MonoBehaviour
         heldFuelCan.transform.localPosition = normalLocalPosition;
         heldFuelCan.transform.localRotation = Quaternion.Euler(normalLocalEuler);
 
+        DisableCombat();
+
         if (debugMessages)
-            Debug.Log("Picked up fuel can.");
+            Debug.Log("Picked up fuel can. Weapons disabled.");
     }
 
     private void DropFuelCan()
@@ -183,15 +197,17 @@ public class PlayerFuelCanCarrier : MonoBehaviour
             heldRigidbody.useGravity = true;
 
             if (playerCamera != null)
-                heldRigidbody.linearVelocity = playerCamera.transform.forward * 2f;
+                heldRigidbody.linearVelocity = playerCamera.transform.forward * dropForwardForce;
         }
 
         if (debugMessages)
-            Debug.Log("Dropped fuel can.");
+            Debug.Log("Dropped fuel can. Weapons enabled.");
 
         heldFuelCan = null;
         heldRigidbody = null;
         heldColliders = null;
+
+        EnableCombat();
     }
 
     private void TryRefuelVehicle()
@@ -227,32 +243,17 @@ public class PlayerFuelCanCarrier : MonoBehaviour
 
         float fuelThisFrame = refuelLitersPerSecond * Time.deltaTime;
 
-        float beforeVehicleFuel = vehicleFuel.currentFuel;
-
         float fuelTakenFromCan = heldFuelCan.TakeFuel(fuelThisFrame);
 
         float addedToVehicle = vehicleFuel.Refuel(fuelTakenFromCan);
 
-        // If vehicle accepted less fuel, return unused fuel to can
         float unusedFuel = fuelTakenFromCan - addedToVehicle;
 
         if (unusedFuel > 0f)
             heldFuelCan.AddFuel(unusedFuel);
 
         if (addedToVehicle > 0f)
-        {
             isRefueling = true;
-
-            if (debugMessages && Mathf.FloorToInt(beforeVehicleFuel) != Mathf.FloorToInt(vehicleFuel.currentFuel))
-            {
-                Debug.Log(
-                    "Refueling " + vehicleFuel.gameObject.name +
-                    " | Vehicle: " + Mathf.RoundToInt(vehicleFuel.currentFuel) +
-                    "/" + Mathf.RoundToInt(vehicleFuel.maxFuel) +
-                    " | Can: " + Mathf.RoundToInt(heldFuelCan.currentLiters)
-                );
-            }
-        }
     }
 
     private VehicleFuel FindNearestVehicleFuel()
@@ -311,5 +312,40 @@ public class PlayerFuelCanCarrier : MonoBehaviour
             Quaternion.Euler(targetEuler),
             rotateSpeed * Time.deltaTime
         );
+    }
+
+    private void DisableCombat()
+    {
+        if (weaponHolder != null)
+            weaponHolder.SetActive(false);
+
+        if (weaponSwitcher != null)
+            weaponSwitcher.enabled = false;
+
+        if (grenadeInventory != null)
+            grenadeInventory.enabled = false;
+
+        if (jumpPlatformInventory != null)
+            jumpPlatformInventory.enabled = false;
+    }
+
+    private void EnableCombat()
+    {
+        if (weaponHolder != null)
+            weaponHolder.SetActive(true);
+
+        if (weaponSwitcher != null)
+            weaponSwitcher.enabled = true;
+
+        if (grenadeInventory != null)
+            grenadeInventory.enabled = true;
+
+        if (jumpPlatformInventory != null)
+            jumpPlatformInventory.enabled = true;
+    }
+
+    public bool IsCarryingFuelCan()
+    {
+        return heldFuelCan != null;
     }
 }

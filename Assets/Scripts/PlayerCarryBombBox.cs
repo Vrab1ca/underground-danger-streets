@@ -6,17 +6,25 @@ public class PlayerCarryBombBox : MonoBehaviour
     public Camera playerCamera;
     public Transform carryPoint;
 
-    [Header("Keys")]
-    public KeyCode pickOrLoadKey = KeyCode.E;
-    public KeyCode dropKey = KeyCode.X;
+    [Header("Disable Combat While Carrying")]
+    public GameObject weaponHolder;
+    public WeaponSwitcher weaponSwitcher;
+    public PlayerGrenadeInventory grenadeInventory;
+    public JumpPlatformInventory jumpPlatformInventory;
 
-    [Header("Settings")]
+    [Header("Keys")]
+    public KeyCode takeKey = KeyCode.E;
+    public KeyCode loadKey = KeyCode.E;
+    public KeyCode dropKey = KeyCode.G;
+
+    [Header("Distances")]
     public float pickupDistance = 3f;
     public float loadDistance = 5f;
-    public float dropForwardForce = 2f;
-    public float dropUpForce = 1f;
 
-    private CarryableBombRefillBox carriedBox;
+    [Header("Drop")]
+    public float dropForwardForce = 2f;
+
+    private CarryableBombRefillBox heldBox;
 
     private void Start()
     {
@@ -26,105 +34,91 @@ public class PlayerCarryBombBox : MonoBehaviour
 
     private void Update()
     {
-        if (carriedBox == null)
+        if (heldBox == null)
         {
-            if (Input.GetKeyDown(pickOrLoadKey))
-            {
+            if (Input.GetKeyDown(takeKey))
                 TryPickUpBox();
-            }
-        }
-        else
-        {
-            if (Input.GetKeyDown(pickOrLoadKey))
-            {
-                TryLoadBoxIntoHelicopter();
-            }
 
-            if (Input.GetKeyDown(dropKey))
-            {
-                DropBox();
-            }
+            return;
+        }
+
+        DisableCombat();
+
+        if (Input.GetKeyDown(loadKey))
+        {
+            TryLoadIntoHelicopter();
+            return;
+        }
+
+        if (Input.GetKeyDown(dropKey))
+        {
+            DropBox();
+            return;
         }
     }
 
     private void TryPickUpBox()
     {
-        CarryableBombRefillBox box = FindBoxInFront();
+        CarryableBombRefillBox box = FindBombBox();
 
         if (box == null)
         {
-            box = FindNearestBox();
-        }
-
-        if (box == null)
-        {
-            Debug.Log("No bomb refill box nearby.");
+            Debug.Log("No bomb box close enough.");
             return;
         }
 
-        carriedBox = box;
-        carriedBox.PickUp(carryPoint);
+        heldBox = box;
+        heldBox.PickUp(carryPoint);
+
+        DisableCombat();
+
+        Debug.Log("Bomb box carried. Press G to drop or E near helicopter to load.");
     }
 
-    private CarryableBombRefillBox FindBoxInFront()
+    private CarryableBombRefillBox FindBombBox()
     {
-        if (playerCamera == null)
-            return null;
-
-        Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
-
-        if (Physics.Raycast(ray, out RaycastHit hit, pickupDistance, ~0, QueryTriggerInteraction.Ignore))
+        if (playerCamera != null)
         {
-            return hit.collider.GetComponentInParent<CarryableBombRefillBox>();
+            Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
+
+            if (Physics.Raycast(ray, out RaycastHit hit, pickupDistance, ~0, QueryTriggerInteraction.Collide))
+            {
+                CarryableBombRefillBox box = hit.collider.GetComponentInParent<CarryableBombRefillBox>();
+
+                if (box != null && !box.isHeld)
+                    return box;
+            }
         }
 
-        return null;
-    }
-
-    private CarryableBombRefillBox FindNearestBox()
-    {
         Collider[] hits = Physics.OverlapSphere(transform.position, pickupDistance);
-
-        CarryableBombRefillBox nearestBox = null;
-        float nearestDistance = Mathf.Infinity;
 
         foreach (Collider hit in hits)
         {
             CarryableBombRefillBox box = hit.GetComponentInParent<CarryableBombRefillBox>();
 
-            if (box == null)
-                continue;
-
-            if (box.isHeld)
-                continue;
-
-            float distance = Vector3.Distance(transform.position, box.transform.position);
-
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                nearestBox = box;
-            }
+            if (box != null && !box.isHeld)
+                return box;
         }
 
-        return nearestBox;
+        return null;
     }
 
-    private void TryLoadBoxIntoHelicopter()
+    private void TryLoadIntoHelicopter()
     {
         HelicopterBombLoader loader = FindHelicopterLoader();
 
         if (loader == null)
         {
-            Debug.Log("No helicopter nearby to load the box.");
+            Debug.Log("No helicopter close enough to load bomb box.");
             return;
         }
 
-        bool loaded = loader.TryLoadBox(carriedBox, transform);
+        bool loaded = loader.TryLoadBox(heldBox, transform);
 
         if (loaded)
         {
-            carriedBox = null;
+            heldBox = null;
+            EnableCombat();
         }
     }
 
@@ -145,27 +139,52 @@ public class PlayerCarryBombBox : MonoBehaviour
 
     private void DropBox()
     {
-        if (carriedBox == null)
+        if (heldBox == null)
             return;
 
         Vector3 dropVelocity = Vector3.zero;
 
         if (playerCamera != null)
-        {
             dropVelocity = playerCamera.transform.forward * dropForwardForce;
-            dropVelocity += Vector3.up * dropUpForce;
-        }
 
-        carriedBox.Drop(dropVelocity);
-        carriedBox = null;
+        heldBox.Drop(dropVelocity);
+        heldBox = null;
+
+        EnableCombat();
     }
 
-    private void OnDrawGizmosSelected()
+    private void DisableCombat()
     {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, pickupDistance);
+        if (weaponHolder != null)
+            weaponHolder.SetActive(false);
 
-        Gizmos.color = Color.cyan;
-        Gizmos.DrawWireSphere(transform.position, loadDistance);
+        if (weaponSwitcher != null)
+            weaponSwitcher.enabled = false;
+
+        if (grenadeInventory != null)
+            grenadeInventory.enabled = false;
+
+        if (jumpPlatformInventory != null)
+            jumpPlatformInventory.enabled = false;
+    }
+
+    private void EnableCombat()
+    {
+        if (weaponHolder != null)
+            weaponHolder.SetActive(true);
+
+        if (weaponSwitcher != null)
+            weaponSwitcher.enabled = true;
+
+        if (grenadeInventory != null)
+            grenadeInventory.enabled = true;
+
+        if (jumpPlatformInventory != null)
+            jumpPlatformInventory.enabled = true;
+    }
+
+    public bool IsCarryingBombBox()
+    {
+        return heldBox != null;
     }
 }

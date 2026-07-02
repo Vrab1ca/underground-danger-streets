@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class WeaponSwitcher : MonoBehaviour
 {
@@ -7,7 +8,8 @@ public class WeaponSwitcher : MonoBehaviour
         Weapon1,
         Weapon2,
         NormalGrenade,
-        Molotov
+        Molotov,
+        JumpPlatform
     }
 
     [Header("Selected Slot")]
@@ -29,6 +31,10 @@ public class WeaponSwitcher : MonoBehaviour
     public GameObject normalGrenadeVisual;
     public GameObject molotovVisual;
 
+    [Header("Jump Platform")]
+    public JumpPlatformInventory jumpPlatformInventory;
+    public GameObject jumpPlatformVisual;
+
     [Header("Drop")]
     public Transform dropPoint;
     public KeyCode dropKey = KeyCode.G;
@@ -37,7 +43,7 @@ public class WeaponSwitcher : MonoBehaviour
 
     private void Start()
     {
-        SelectSlot(QuickSlot.Weapon1);
+        SelectFirstAvailableSlot();
     }
 
     private void Update()
@@ -52,21 +58,27 @@ public class WeaponSwitcher : MonoBehaviour
         }
 
         HandleUseSelectedItem();
+
+        if (!IsSlotAvailable(selectedSlot))
+            SelectFirstAvailableSlot();
     }
 
     private void HandleNumberKeys()
     {
         if (Input.GetKeyDown(KeyCode.Alpha1))
-            SelectSlot(QuickSlot.Weapon1);
+            TrySelectSlot(QuickSlot.Weapon1);
 
         if (Input.GetKeyDown(KeyCode.Alpha2))
-            SelectSlot(QuickSlot.Weapon2);
+            TrySelectSlot(QuickSlot.Weapon2);
 
         if (Input.GetKeyDown(KeyCode.Alpha3))
-            SelectSlot(QuickSlot.NormalGrenade);
+            TrySelectSlot(QuickSlot.NormalGrenade);
 
         if (Input.GetKeyDown(KeyCode.Alpha4))
-            SelectSlot(QuickSlot.Molotov);
+            TrySelectSlot(QuickSlot.Molotov);
+
+        if (Input.GetKeyDown(KeyCode.Alpha5))
+            TrySelectSlot(QuickSlot.JumpPlatform);
     }
 
     private void HandleScroll()
@@ -79,32 +91,132 @@ public class WeaponSwitcher : MonoBehaviour
         float scroll = Input.GetAxis("Mouse ScrollWheel");
 
         if (scroll > 0f)
-            NextSlot();
+            SelectNextAvailableSlot();
 
         if (scroll < 0f)
-            PreviousSlot();
+            SelectPreviousAvailableSlot();
     }
 
-    private void NextSlot()
+    private void TrySelectSlot(QuickSlot slot)
     {
-        int slot = (int)selectedSlot;
-        slot++;
+        if (!IsSlotAvailable(slot))
+        {
+            Debug.Log("Slot not available: " + slot);
+            return;
+        }
 
-        if (slot > 3)
-            slot = 0;
-
-        SelectSlot((QuickSlot)slot);
+        SelectSlot(slot);
     }
 
-    private void PreviousSlot()
+    private void SelectNextAvailableSlot()
     {
-        int slot = (int)selectedSlot;
-        slot--;
+        int current = (int)selectedSlot;
 
-        if (slot < 0)
-            slot = 3;
+        for (int i = 1; i <= 5; i++)
+        {
+            int next = current + i;
 
-        SelectSlot((QuickSlot)slot);
+            if (next > 4)
+                next -= 5;
+
+            QuickSlot nextSlot = (QuickSlot)next;
+
+            if (IsSlotAvailable(nextSlot))
+            {
+                SelectSlot(nextSlot);
+                return;
+            }
+        }
+    }
+
+    private void SelectPreviousAvailableSlot()
+    {
+        int current = (int)selectedSlot;
+
+        for (int i = 1; i <= 5; i++)
+        {
+            int previous = current - i;
+
+            if (previous < 0)
+                previous += 5;
+
+            QuickSlot previousSlot = (QuickSlot)previous;
+
+            if (IsSlotAvailable(previousSlot))
+            {
+                SelectSlot(previousSlot);
+                return;
+            }
+        }
+    }
+
+    private void SelectFirstAvailableSlot()
+    {
+        if (IsSlotAvailable(QuickSlot.Weapon1))
+        {
+            SelectSlot(QuickSlot.Weapon1);
+            return;
+        }
+
+        if (IsSlotAvailable(QuickSlot.Weapon2))
+        {
+            SelectSlot(QuickSlot.Weapon2);
+            return;
+        }
+
+        if (IsSlotAvailable(QuickSlot.NormalGrenade))
+        {
+            SelectSlot(QuickSlot.NormalGrenade);
+            return;
+        }
+
+        if (IsSlotAvailable(QuickSlot.Molotov))
+        {
+            SelectSlot(QuickSlot.Molotov);
+            return;
+        }
+
+        if (IsSlotAvailable(QuickSlot.JumpPlatform))
+        {
+            SelectSlot(QuickSlot.JumpPlatform);
+            return;
+        }
+
+        HideAllWeaponsAndItems();
+    }
+
+    private bool IsSlotAvailable(QuickSlot slot)
+    {
+        Weapon[] weapons = GetWeapons();
+
+        if (slot == QuickSlot.Weapon1)
+            return weapons.Length >= 1;
+
+        if (slot == QuickSlot.Weapon2)
+            return weapons.Length >= 2;
+
+        if (slot == QuickSlot.NormalGrenade)
+        {
+            if (grenadeInventory == null)
+                return false;
+
+            return grenadeInventory.GetGrenadeCount(GrenadeType.Normal) > 0;
+        }
+
+        if (slot == QuickSlot.Molotov)
+        {
+            if (grenadeInventory == null)
+                return false;
+
+            return grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) > 0;
+        }
+
+        if (slot == QuickSlot.JumpPlatform)
+        {
+            return GetJumpPlatformCount() > 0;
+        }
+
+        return false;
     }
 
     public void SelectSlot(QuickSlot slot)
@@ -124,7 +236,7 @@ public class WeaponSwitcher : MonoBehaviour
             grenadeInventory.SelectMolotov();
 
         UpdateWeaponVisibility();
-        UpdateGrenadeVisuals();
+        UpdateItemVisuals();
 
         Debug.Log("Selected slot: " + selectedSlot);
     }
@@ -140,19 +252,57 @@ public class WeaponSwitcher : MonoBehaviour
 
             bool shouldShow =
                 IsWeaponSlot() &&
-                i == selectedWeaponIndex;
+                i == selectedWeaponIndex &&
+                IsSlotAvailable(selectedSlot);
 
             weapons[i].gameObject.SetActive(shouldShow);
         }
     }
 
-    private void UpdateGrenadeVisuals()
+    private void UpdateItemVisuals()
     {
+        bool showNormalGrenade =
+            selectedSlot == QuickSlot.NormalGrenade &&
+            grenadeInventory != null &&
+            grenadeInventory.GetGrenadeCount(GrenadeType.Normal) > 0;
+
+        bool showMolotov =
+            selectedSlot == QuickSlot.Molotov &&
+            grenadeInventory != null &&
+            grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) > 0;
+
+        bool showJumpPlatform =
+            selectedSlot == QuickSlot.JumpPlatform &&
+            GetJumpPlatformCount() > 0;
+
         if (normalGrenadeVisual != null)
-            normalGrenadeVisual.SetActive(selectedSlot == QuickSlot.NormalGrenade);
+            normalGrenadeVisual.SetActive(showNormalGrenade);
 
         if (molotovVisual != null)
-            molotovVisual.SetActive(selectedSlot == QuickSlot.Molotov);
+            molotovVisual.SetActive(showMolotov);
+
+        if (jumpPlatformVisual != null)
+            jumpPlatformVisual.SetActive(showJumpPlatform);
+    }
+
+    private void HideAllWeaponsAndItems()
+    {
+        Weapon[] weapons = GetWeapons();
+
+        for (int i = 0; i < weapons.Length; i++)
+        {
+            if (weapons[i] != null)
+                weapons[i].gameObject.SetActive(false);
+        }
+
+        if (normalGrenadeVisual != null)
+            normalGrenadeVisual.SetActive(false);
+
+        if (molotovVisual != null)
+            molotovVisual.SetActive(false);
+
+        if (jumpPlatformVisual != null)
+            jumpPlatformVisual.SetActive(false);
     }
 
     private void HandleUseSelectedItem()
@@ -162,10 +312,15 @@ public class WeaponSwitcher : MonoBehaviour
 
         if (selectedSlot == QuickSlot.NormalGrenade)
         {
-            if (grenadeInventory != null)
+            if (grenadeInventory != null && grenadeInventory.GetGrenadeCount(GrenadeType.Normal) > 0)
             {
                 grenadeInventory.SelectNormalGrenade();
-                grenadeInventory.ThrowSelectedGrenade();
+                grenadeInventory.ThrowNormalGrenade();
+
+                if (grenadeInventory.GetGrenadeCount(GrenadeType.Normal) <= 0)
+                    SelectFirstAvailableSlot();
+                else
+                    UpdateItemVisuals();
             }
 
             return;
@@ -173,14 +328,52 @@ public class WeaponSwitcher : MonoBehaviour
 
         if (selectedSlot == QuickSlot.Molotov)
         {
-            if (grenadeInventory != null)
+            if (grenadeInventory != null && grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) > 0)
             {
                 grenadeInventory.SelectMolotov();
-                grenadeInventory.ThrowSelectedGrenade();
+                grenadeInventory.ThrowMolotov();
+
+                if (grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) <= 0)
+                    SelectFirstAvailableSlot();
+                else
+                    UpdateItemVisuals();
             }
 
             return;
         }
+
+        if (selectedSlot == QuickSlot.JumpPlatform)
+        {
+            UseJumpPlatform();
+
+            if (GetJumpPlatformCount() <= 0)
+                SelectFirstAvailableSlot();
+            else
+                UpdateItemVisuals();
+
+            return;
+        }
+    }
+
+    private void UseJumpPlatform()
+    {
+        if (jumpPlatformInventory == null)
+        {
+            Debug.LogWarning("Jump Platform Inventory is missing.");
+            return;
+        }
+
+        jumpPlatformInventory.PlacePlatform();
+
+        Debug.Log("Placed jump platform.");
+    }
+
+    private int GetJumpPlatformCount()
+    {
+        if (jumpPlatformInventory == null)
+            return 0;
+
+        return jumpPlatformInventory.GetPlatformCount();
     }
 
     private bool IsWeaponSlot()
@@ -236,14 +429,6 @@ public class WeaponSwitcher : MonoBehaviour
             weapon.scopeOverlay = scopeOverlay;
             weapon.normalCrosshairUI = normalCrosshairUI;
         }
-
-        SimpleADS ads = weaponObject.GetComponent<SimpleADS>();
-
-        if (ads != null)
-        {
-            ads.fpsCamera = fpsCamera;
-            ads.carCamera = carCamera;
-        }
     }
 
     public void DropCurrentWeapon()
@@ -290,7 +475,8 @@ public class WeaponSwitcher : MonoBehaviour
         Destroy(activeWeapon.gameObject);
 
         selectedWeaponIndex = 0;
-        SelectSlot(QuickSlot.Weapon1);
+
+        Invoke(nameof(SelectFirstAvailableSlot), 0.05f);
     }
 
     public Weapon GetActiveWeapon()
@@ -319,7 +505,7 @@ public class WeaponSwitcher : MonoBehaviour
 
     private Weapon[] GetWeapons()
     {
-        System.Collections.Generic.List<Weapon> weapons = new System.Collections.Generic.List<Weapon>();
+        List<Weapon> weapons = new List<Weapon>();
 
         for (int i = 0; i < transform.childCount; i++)
         {

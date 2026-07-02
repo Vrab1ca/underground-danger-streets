@@ -11,12 +11,12 @@ public class PlayerGrenadeInventory : MonoBehaviour
     public GameObject molotovPrefab;
 
     [Header("Normal Grenades")]
-    public int normalGrenades = 3;
-    public int maxNormalGrenades = 3;
+    public int normalGrenades = 0;
+    public int maxNormalGrenades = 5;
 
     [Header("Molotovs")]
-    public int molotovs = 2;
-    public int maxMolotovs = 2;
+    public int molotovs = 0;
+    public int maxMolotovs = 5;
 
     [Header("Selected Grenade")]
     public GrenadeType selectedGrenade = GrenadeType.Normal;
@@ -24,11 +24,14 @@ public class PlayerGrenadeInventory : MonoBehaviour
     [Header("Throw Settings")]
     public float throwForce = 18f;
     public float upwardForce = 2f;
+    public float throwCooldown = 0.25f;
 
     [Header("Old Controls Optional")]
     public bool useOldQZControls = false;
     public KeyCode oldThrowKey = KeyCode.Q;
     public KeyCode oldSwitchKey = KeyCode.Z;
+
+    private float nextThrowTime;
 
     private void Start()
     {
@@ -83,11 +86,6 @@ public class PlayerGrenadeInventory : MonoBehaviour
         Debug.Log("Selected grenade: " + selectedGrenade);
     }
 
-    public void PreviousGrenade()
-    {
-        NextGrenade();
-    }
-
     public void ThrowSelectedGrenade()
     {
         if (selectedGrenade == GrenadeType.Normal)
@@ -105,6 +103,9 @@ public class PlayerGrenadeInventory : MonoBehaviour
 
     public void ThrowNormalGrenade()
     {
+        if (!CanThrowNow())
+            return;
+
         if (normalGrenades <= 0)
         {
             Debug.Log("No normal grenades.");
@@ -117,14 +118,20 @@ public class PlayerGrenadeInventory : MonoBehaviour
             return;
         }
 
-        ThrowGrenadePrefab(normalGrenadePrefab);
         normalGrenades--;
 
-        Debug.Log("Threw Normal Grenade. Left: " + normalGrenades);
+        ThrowGrenadePrefab(normalGrenadePrefab);
+
+        nextThrowTime = Time.time + throwCooldown;
+
+        Debug.Log("Threw NORMAL grenade. Normal left: " + normalGrenades + " | Molotov left: " + molotovs);
     }
 
     public void ThrowMolotov()
     {
+        if (!CanThrowNow())
+            return;
+
         if (molotovs <= 0)
         {
             Debug.Log("No molotovs.");
@@ -137,10 +144,21 @@ public class PlayerGrenadeInventory : MonoBehaviour
             return;
         }
 
-        ThrowGrenadePrefab(molotovPrefab);
         molotovs--;
 
-        Debug.Log("Threw Molotov. Left: " + molotovs);
+        ThrowGrenadePrefab(molotovPrefab);
+
+        nextThrowTime = Time.time + throwCooldown;
+
+        Debug.Log("Threw MOLOTOV. Normal left: " + normalGrenades + " | Molotov left: " + molotovs);
+    }
+
+    private bool CanThrowNow()
+    {
+        if (Time.time < nextThrowTime)
+            return false;
+
+        return true;
     }
 
     private void ThrowGrenadePrefab(GameObject grenadePrefab)
@@ -181,6 +199,8 @@ public class PlayerGrenadeInventory : MonoBehaviour
 
             if (normalGrenades > maxNormalGrenades)
                 normalGrenades = maxNormalGrenades;
+
+            Debug.Log("Added normal grenades. Now: " + normalGrenades);
         }
 
         if (type == GrenadeType.Molotov)
@@ -189,28 +209,9 @@ public class PlayerGrenadeInventory : MonoBehaviour
 
             if (molotovs > maxMolotovs)
                 molotovs = maxMolotovs;
+
+            Debug.Log("Added molotovs. Now: " + molotovs);
         }
-    }
-
-    public void AddGrenades(GrenadeType type, int amount)
-    {
-        AddGrenade(type, amount);
-    }
-
-    public void AddNormalGrenades(int amount)
-    {
-        normalGrenades += amount;
-
-        if (normalGrenades > maxNormalGrenades)
-            normalGrenades = maxNormalGrenades;
-    }
-
-    public void AddMolotovs(int amount)
-    {
-        molotovs += amount;
-
-        if (molotovs > maxMolotovs)
-            molotovs = maxMolotovs;
     }
 
     public int GetGrenadeCount(GrenadeType type)

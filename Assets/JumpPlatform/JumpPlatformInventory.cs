@@ -3,11 +3,14 @@ using UnityEngine;
 public class JumpPlatformInventory : MonoBehaviour
 {
     [Header("Inventory")]
-    public int maxPlatforms = 3;
-    public int currentPlatforms = 3;
+    public int currentPlatforms = 0;
+    public int maxPlatforms = 5;
 
     [Header("Platform")]
     public GameObject jumpPlatformPrefab;
+
+    [Header("Old Control Optional")]
+    public bool useOldTKey = false;
     public KeyCode placeKey = KeyCode.T;
 
     [Header("Placement")]
@@ -27,10 +30,18 @@ public class JumpPlatformInventory : MonoBehaviour
 
     private void Update()
     {
+        if (!useOldTKey)
+            return;
+
         if (Input.GetKeyDown(placeKey))
         {
             PlacePlatform();
         }
+    }
+
+    public int GetPlatformCount()
+    {
+        return currentPlatforms;
     }
 
     public void AddPlatforms(int amount)
@@ -43,7 +54,7 @@ public class JumpPlatformInventory : MonoBehaviour
         Debug.Log("Jump platforms: " + currentPlatforms + " / " + maxPlatforms);
     }
 
-    private void PlacePlatform()
+    public void PlacePlatform()
     {
         if (currentPlatforms <= 0)
         {
