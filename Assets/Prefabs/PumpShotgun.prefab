@@ -131,6 +131,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Weapon
   weaponName: Pump Shotgun
   pickupPrefab: {fileID: 7845350960335813213, guid: fadca2486b64e6947954d8f2eab61be2, type: 3}
+  ammoType: 3
+  ammoInventory: {fileID: 0}
   fpsCamera: {fileID: 0}
   carCamera: {fileID: 0}
   muzzleFlash: {fileID: 0}
@@ -140,6 +142,9 @@ MonoBehaviour:
   reloadClip: {fileID: 0}
   animator: {fileID: 0}
   shootEffect: {fileID: 0}
+  scopeOverlay: {fileID: 0}
+  normalCrosshairUI: {fileID: 0}
+  weaponVisualRoot: {fileID: 0}
   damage: 10
   range: 45
   fireRate: 1
@@ -150,6 +155,16 @@ MonoBehaviour:
   ammoInMagazine: 5
   reserveAmmo: 25
   reloadTime: 2
+  enableSniperZoom: 0
+  zoomToggleMode: 1
+  normalFOV: 60
+  zoomFOVs:
+  - 35
+  - 20
+  - 10
+  zoomSpeed: 12
+  scopedSpread: 0
+  hideWeaponWhenZoomed: 1
   debugMessages: 1
 --- !u!114 &8728747580001328354
 MonoBehaviour:

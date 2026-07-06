@@ -1,9 +1,10 @@
 using UnityEngine;
 
-public class HealthPickup : MonoBehaviour
+public class ArmorPickup : MonoBehaviour
 {
-    [Header("Health Item")]
-    public HealthItemType itemType = HealthItemType.Small20;
+    [Header("Armor Type")]
+    public bool randomArmorType = false;
+    public ArmorItemType armorType = ArmorItemType.Strong100;
 
     [Header("Pickup")]
     public KeyCode pickupKey = KeyCode.E;
@@ -16,28 +17,33 @@ public class HealthPickup : MonoBehaviour
     public float bobSpeed = 2f;
     public float bobAmount = 0.15f;
 
-    private GameObject playerObject;
+    [Header("Debug")]
+    public bool debugMessages = true;
+
     private Transform player;
-    private PlayerHealthInventory inventory;
+    private PlayerArmorInventory armorInventory;
     private Vector3 startLocalPosition;
     private bool pickedUp;
 
     private void Start()
     {
-        playerObject = GameObject.FindGameObjectWithTag("Player");
+        if (randomArmorType)
+            armorType = GetRandomArmorType();
+
+        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
 
         if (playerObject == null)
         {
-            Debug.LogWarning("HealthPickup cannot find object with Player tag.");
+            Debug.LogWarning(gameObject.name + " cannot find Player tag.");
             return;
         }
 
         player = playerObject.transform;
-        inventory = playerObject.GetComponent<PlayerHealthInventory>();
+        armorInventory = playerObject.GetComponent<PlayerArmorInventory>();
 
-        if (inventory == null)
+        if (armorInventory == null)
         {
-            Debug.LogWarning("Player does not have PlayerHealthInventory.");
+            Debug.LogWarning("Player does not have PlayerArmorInventory.");
             return;
         }
 
@@ -45,6 +51,8 @@ public class HealthPickup : MonoBehaviour
             modelToAnimate = transform;
 
         startLocalPosition = modelToAnimate.localPosition;
+
+        Debug.Log(gameObject.name + " armor pickup ready. Final type: " + armorType);
     }
 
     private void Update()
@@ -54,7 +62,7 @@ public class HealthPickup : MonoBehaviour
         if (pickedUp)
             return;
 
-        if (player == null || inventory == null)
+        if (player == null || armorInventory == null)
             return;
 
         float distance = Vector3.Distance(transform.position, player.position);
@@ -63,9 +71,7 @@ public class HealthPickup : MonoBehaviour
             return;
 
         if (Input.GetKeyDown(pickupKey))
-        {
-            TryPickup();
-        }
+            PickupArmor();
     }
 
     private void AnimatePickup()
@@ -81,21 +87,34 @@ public class HealthPickup : MonoBehaviour
         modelToAnimate.localPosition = pos;
     }
 
-    private void TryPickup()
+    private void PickupArmor()
     {
-        bool added = inventory.AddHealthItem(itemType);
+        bool added = armorInventory.AddArmorItem(armorType);
 
         if (!added)
-        {
-            Debug.Log("Cannot pick health item. Inventory full.");
             return;
-        }
 
         pickedUp = true;
 
-        Debug.Log("PICKED HEALTH BOX: " + itemType + " | Health inventory now: " + inventory.GetItemCount() + " / " + inventory.maxHealthItems);
+        Debug.Log("PICKED ARMOR: " + armorType);
 
         if (destroyAfterPickup)
             Destroy(gameObject);
+    }
+
+    private ArmorItemType GetRandomArmorType()
+    {
+        int random = Random.Range(0, 4);
+
+        if (random == 0)
+            return ArmorItemType.Strong100;
+
+        if (random == 1)
+            return ArmorItemType.Strong50;
+
+        if (random == 2)
+            return ArmorItemType.Weak100;
+
+        return ArmorItemType.Weak50;
     }
 }

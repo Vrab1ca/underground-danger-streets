@@ -107,6 +107,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Weapon
   weaponName: AK-47
   pickupPrefab: {fileID: 3669544189499271502, guid: 78528c7a3833a6944bb23587668d8cfc, type: 3}
+  ammoType: 1
+  ammoInventory: {fileID: 0}
   fpsCamera: {fileID: 0}
   carCamera: {fileID: 0}
   muzzleFlash: {fileID: 0}
@@ -116,6 +118,9 @@ MonoBehaviour:
   reloadClip: {fileID: 0}
   animator: {fileID: 0}
   shootEffect: {fileID: 1615255892515505023}
+  scopeOverlay: {fileID: 0}
+  normalCrosshairUI: {fileID: 0}
+  weaponVisualRoot: {fileID: 0}
   damage: 18
   range: 120
   fireRate: 10
@@ -124,8 +129,18 @@ MonoBehaviour:
   spread: 0.025
   magazineSize: 30
   ammoInMagazine: 30
-  reserveAmmo: 120
+  reserveAmmo: 90
   reloadTime: 1.7
+  enableSniperZoom: 0
+  zoomToggleMode: 1
+  normalFOV: 60
+  zoomFOVs:
+  - 35
+  - 20
+  - 10
+  zoomSpeed: 12
+  scopedSpread: 0
+  hideWeaponWhenZoomed: 1
   debugMessages: 1
 --- !u!114 &5768821711686915224
 MonoBehaviour:

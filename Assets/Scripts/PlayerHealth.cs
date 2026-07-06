@@ -14,6 +14,9 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     [Header("Scenes")]
     public string mainMenuSceneName = "MainMenu";
 
+    [Header("Armor")]
+    public PlayerArmor playerArmor;
+
     private bool isDead;
 
     private void Awake()
@@ -25,6 +28,9 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
         if (deathPanel != null)
             deathPanel.SetActive(false);
+
+        if (playerArmor == null)
+            playerArmor = GetComponent<PlayerArmor>();
     }
 
     public void TakeDamage(float amount)
@@ -32,6 +38,19 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         if (isDead)
             return;
 
+        // Armor protects first.
+        if (playerArmor != null)
+        {
+            amount = playerArmor.ProtectFromDamage(amount);
+
+            if (amount <= 0f)
+            {
+                Debug.Log("Armor blocked the damage. Player health: " + currentHealth);
+                return;
+            }
+        }
+
+        // If armor did not block everything, player takes damage.
         currentHealth -= amount;
 
         if (currentHealth < 0f)

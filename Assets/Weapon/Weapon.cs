@@ -7,6 +7,10 @@ public class Weapon : MonoBehaviour
     public string weaponName = "Weapon";
     public GameObject pickupPrefab;
 
+    [Header("Typed Ammo")]
+    public WeaponAmmoType ammoType = WeaponAmmoType.Rifle;
+    public PlayerAmmoInventory ammoInventory;
+
     [Header("References")]
     public Camera fpsCamera;
     public Camera carCamera;
@@ -36,7 +40,10 @@ public class Weapon : MonoBehaviour
     [Header("Ammo")]
     public int magazineSize = 30;
     public int ammoInMagazine = 30;
+
+    [Tooltip("Old ammo system. Keep this so your old ammo box still works.")]
     public int reserveAmmo = 90;
+
     public float reloadTime = 1.5f;
 
     [Header("Sniper Zoom")]
@@ -71,13 +78,36 @@ public class Weapon : MonoBehaviour
         return enableSniperZoom && isZoomed;
     }
 
-    public int AmmoInMagazine => ammoInMagazine;
-    public int ReserveAmmo => reserveAmmo;
-    public bool IsReloading => reloading;
+    public int AmmoInMagazine
+    {
+        get
+        {
+            return ammoInMagazine;
+        }
+    }
+
+    public int ReserveAmmo
+    {
+        get
+        {
+            return reserveAmmo;
+        }
+    }
+
+    public bool IsReloading
+    {
+        get
+        {
+            return reloading;
+        }
+    }
 
     private void Awake()
     {
         ammoInMagazine = Mathf.Clamp(ammoInMagazine, 0, magazineSize);
+
+        if (ammoInventory == null)
+            ammoInventory = FindFirstObjectByType<PlayerAmmoInventory>();
 
         if (shootEffect == null)
             shootEffect = GetComponent<WeaponShootEffect>();
@@ -129,7 +159,38 @@ public class Weapon : MonoBehaviour
         reserveAmmo += amount;
 
         if (debugMessages)
-            Debug.Log(weaponName + " ammo added: " + amount);
+            Debug.Log(weaponName + " old reserve ammo added: " + amount + " | Reserve: " + reserveAmmo);
+    }
+
+    public int AddAmmoToMagazineInstant(WeaponAmmoType incomingAmmoType, int amount)
+    {
+        if (incomingAmmoType != ammoType)
+        {
+            Debug.Log("Wrong ammo type. Weapon needs " + ammoType + " but box is " + incomingAmmoType);
+            return 0;
+        }
+
+        if (amount <= 0)
+            return 0;
+
+        if (ammoInMagazine >= magazineSize)
+        {
+            Debug.Log(weaponName + " magazine is already full.");
+            return 0;
+        }
+
+        int neededAmmo = magazineSize - ammoInMagazine;
+        int addedAmmo = Mathf.Min(neededAmmo, amount);
+
+        ammoInMagazine += addedAmmo;
+
+        Debug.Log(
+            "INSTANT AMMO ADDED TO " + weaponName +
+            " | Added: " + addedAmmo +
+            " | Magazine: " + ammoInMagazine + " / " + magazineSize
+        );
+
+        return addedAmmo;
     }
 
     private void HandleZoomInput()
@@ -276,7 +337,19 @@ public class Weapon : MonoBehaviour
             shootEffect.PlayShootEffect();
 
         if (debugMessages)
-            Debug.Log(weaponName + " fired. Ammo: " + ammoInMagazine + " / " + reserveAmmo);
+        {
+            int typedAmmoLeft = 0;
+
+            if (ammoInventory != null)
+                typedAmmoLeft = ammoInventory.GetAmmo(ammoType);
+
+            Debug.Log(
+                weaponName + " fired. Magazine: " + ammoInMagazine +
+                " / " + magazineSize +
+                " | Old reserve: " + reserveAmmo +
+                " | " + ammoType + " ammo: " + typedAmmoLeft
+            );
+        }
 
         if (muzzleFlash != null)
             muzzleFlash.Play();
@@ -349,8 +422,21 @@ public class Weapon : MonoBehaviour
 
     private IEnumerator Reload()
     {
-        if (ammoInMagazine >= magazineSize || reserveAmmo <= 0)
+        if (ammoInMagazine >= magazineSize)
             yield break;
+
+        int typedAmmoAvailable = 0;
+
+        if (ammoInventory != null)
+            typedAmmoAvailable = ammoInventory.GetAmmo(ammoType);
+
+        if (reserveAmmo <= 0 && typedAmmoAvailable <= 0)
+        {
+            if (debugMessages)
+                Debug.Log("No ammo to reload for " + weaponName);
+
+            yield break;
+        }
 
         StopZoom();
 
@@ -368,15 +454,39 @@ public class Weapon : MonoBehaviour
         yield return new WaitForSeconds(reloadTime);
 
         int needed = magazineSize - ammoInMagazine;
-        int loaded = Mathf.Min(needed, reserveAmmo);
 
-        ammoInMagazine += loaded;
-        reserveAmmo -= loaded;
+        int loadedFromOldReserve = Mathf.Min(needed, reserveAmmo);
+        ammoInMagazine += loadedFromOldReserve;
+        reserveAmmo -= loadedFromOldReserve;
+
+        needed = magazineSize - ammoInMagazine;
+
+        int loadedFromTypedAmmo = 0;
+
+        if (needed > 0 && ammoInventory != null)
+        {
+            loadedFromTypedAmmo = ammoInventory.TakeAmmo(ammoType, needed);
+            ammoInMagazine += loadedFromTypedAmmo;
+        }
 
         reloading = false;
 
         if (debugMessages)
-            Debug.Log(weaponName + " reloaded. Ammo: " + ammoInMagazine + " / " + reserveAmmo);
+        {
+            int typedLeft = 0;
+
+            if (ammoInventory != null)
+                typedLeft = ammoInventory.GetAmmo(ammoType);
+
+            Debug.Log(
+                weaponName + " reloaded." +
+                " Magazine: " + ammoInMagazine + " / " + magazineSize +
+                " | Loaded old reserve: " + loadedFromOldReserve +
+                " | Loaded typed ammo: " + loadedFromTypedAmmo +
+                " | Old reserve left: " + reserveAmmo +
+                " | " + ammoType + " ammo left: " + typedLeft
+            );
+        }
     }
 
     private Camera GetShootCamera()

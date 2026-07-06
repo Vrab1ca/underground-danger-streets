@@ -195,6 +195,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Weapon
   weaponName: AWP Sniper
   pickupPrefab: {fileID: 4589777656178697506, guid: c7a444551e519304196662ddbbb2724e, type: 3}
+  ammoType: 0
+  ammoInventory: {fileID: 0}
   fpsCamera: {fileID: 0}
   carCamera: {fileID: 0}
   muzzleFlash: {fileID: 0}

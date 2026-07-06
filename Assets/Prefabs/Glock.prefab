@@ -129,6 +129,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Weapon
   weaponName: Glock
   pickupPrefab: {fileID: 7148281877999555986, guid: eb63435cf33b27a4f9929fe74f436fd7, type: 3}
+  ammoType: 2
+  ammoInventory: {fileID: 0}
   fpsCamera: {fileID: 0}
   carCamera: {fileID: 0}
   muzzleFlash: {fileID: 0}
@@ -138,6 +140,9 @@ MonoBehaviour:
   reloadClip: {fileID: 0}
   animator: {fileID: 0}
   shootEffect: {fileID: 0}
+  scopeOverlay: {fileID: 0}
+  normalCrosshairUI: {fileID: 0}
+  weaponVisualRoot: {fileID: 0}
   damage: 20
   range: 80
   fireRate: 4
@@ -148,6 +153,16 @@ MonoBehaviour:
   ammoInMagazine: 12
   reserveAmmo: 48
   reloadTime: 1.2
+  enableSniperZoom: 0
+  zoomToggleMode: 1
+  normalFOV: 60
+  zoomFOVs:
+  - 35
+  - 20
+  - 10
+  zoomSpeed: 12
+  scopedSpread: 0
+  hideWeaponWhenZoomed: 1
   debugMessages: 1
 --- !u!114 &3175004474094664918
 MonoBehaviour:
