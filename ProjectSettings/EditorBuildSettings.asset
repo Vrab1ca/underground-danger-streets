@@ -15,8 +15,11 @@ EditorBuildSettings:
     path: Assets/Scenes/LoadingScreen.unity
     guid: da8e4c0b88fb27844ad1126975c9e078
   - enabled: 1
-    path: Assets/Scenes/Level1.unity
+    path: Assets/Scenes/TutorialRoom.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/SurvivalLevel 1.unity
+    guid: f933111b622aa4a4c8240a28aa94fe27
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0

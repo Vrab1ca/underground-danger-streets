@@ -1,92 +1,123 @@
 using UnityEngine;
 
-[RequireComponent(typeof(CharacterController))]
-public class PlayerMotor : MonoBehaviour
+public class PlayerStamina : MonoBehaviour
 {
-    [Header("Movement")]
-    public float walkSpeed = 5f;
-    public float sprintSpeed = 8f;
-    public float crouchSpeed = 2.5f;
-    public float jumpHeight = 1.2f;
-    public float gravity = -20f;
-
-    [Header("Crouch")]
-    public float standingHeight = 2f;
-    public float crouchHeight = 1f;
-
     [Header("Stamina")]
-    public PlayerStamina stamina;
+    public float maxStamina = 100f;
+    public float currentStamina = 100f;
 
-    private CharacterController controller;
-    private Vector3 velocity;
+    [Header("Run")]
+    public float runStaminaCostPerSecond = 18f;
+    public float minStaminaToRun = 5f;
 
-    public bool IsGrounded => controller != null && controller.enabled && controller.isGrounded;
+    [Header("Jump")]
+    public float jumpStaminaCost = 18f;
+
+    [Header("Recover")]
+    public float staminaRecoverPerSecond = 14f;
+    public float recoverDelayAfterUse = 0.35f;
+
+    [Header("Debug")]
+    public bool showNotEnoughMessage = true;
+    public float notEnoughMessageCooldown = 0.8f;
+
+    private float nextRecoverTime;
+    private float nextNotEnoughMessageTime;
+
+    // This fixes PlayerStaminaHUD.cs error.
+    public float StaminaPercent
+    {
+        get
+        {
+            if (maxStamina <= 0f)
+                return 0f;
+
+            return currentStamina / maxStamina;
+        }
+    }
 
     private void Awake()
     {
-        controller = GetComponent<CharacterController>();
-        standingHeight = controller.height;
-
-        if (stamina == null)
-            stamina = GetComponent<PlayerStamina>();
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
     }
 
     private void Update()
     {
-        if (controller == null || !controller.enabled || !gameObject.activeInHierarchy)
+        RecoverStamina();
+        SendStaminaToHUD();
+    }
+
+    public bool CanRun()
+    {
+        return currentStamina >= minStaminaToRun;
+    }
+
+    public bool CanSprint()
+    {
+        return CanRun();
+    }
+
+    public void UseRunStamina()
+    {
+        if (currentStamina <= 0f)
             return;
 
-        bool grounded = controller.isGrounded;
+        currentStamina -= runStaminaCostPerSecond * Time.deltaTime;
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
 
-        if (grounded && velocity.y < 0f)
-            velocity.y = -2f;
+        nextRecoverTime = Time.time + recoverDelayAfterUse;
 
-        float x = Input.GetAxis("Horizontal");
-        float z = Input.GetAxis("Vertical");
+        SendStaminaToHUD();
+    }
 
-        bool crouch = Input.GetKey(KeyCode.LeftControl);
-        bool wantsSprint = Input.GetKey(KeyCode.LeftShift);
-
-        Vector3 move = transform.right * x + transform.forward * z;
-
-        if (move.magnitude > 1f)
-            move.Normalize();
-
-        bool isMoving = move.magnitude > 0.1f;
-
-        float speed = walkSpeed;
-
-        if (crouch)
+    public bool TryUseJumpStamina()
+    {
+        if (currentStamina < jumpStaminaCost)
         {
-            speed = crouchSpeed;
-        }
-        else if (wantsSprint && isMoving && stamina != null && stamina.CanRun())
-        {
-            speed = sprintSpeed;
-            stamina.UseRunStamina();
-        }
-        else
-        {
-            speed = walkSpeed;
+            ShowNotEnoughStaminaMessage();
+            return false;
         }
 
-        controller.Move(move * speed * Time.deltaTime);
+        currentStamina -= jumpStaminaCost;
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
 
-        if (Input.GetButtonDown("Jump") && grounded && !crouch)
+        nextRecoverTime = Time.time + recoverDelayAfterUse;
+
+        SendStaminaToHUD();
+
+        return true;
+    }
+
+    private void RecoverStamina()
+    {
+        if (Time.time < nextRecoverTime)
+            return;
+
+        if (currentStamina >= maxStamina)
+            return;
+
+        currentStamina += staminaRecoverPerSecond * Time.deltaTime;
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina);
+    }
+
+    private void ShowNotEnoughStaminaMessage()
+    {
+        if (!showNotEnoughMessage)
+            return;
+
+        if (Time.time < nextNotEnoughMessageTime)
+            return;
+
+        nextNotEnoughMessageTime = Time.time + notEnoughMessageCooldown;
+
+        Debug.Log("Not enough stamina.");
+    }
+
+    private void SendStaminaToHUD()
+    {
+        if (ManualFPSHUDUI.Instance != null)
         {
-            if (stamina == null || stamina.TryUseJumpStamina())
-            {
-                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            }
+            ManualFPSHUDUI.Instance.SetStamina(currentStamina, maxStamina);
         }
-
-        controller.height = Mathf.Lerp(
-            controller.height,
-            crouch ? crouchHeight : standingHeight,
-            12f * Time.deltaTime
-        );
-
-        velocity.y += gravity * Time.deltaTime;
-        controller.Move(velocity * Time.deltaTime);
     }
 }
