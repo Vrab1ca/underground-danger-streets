@@ -7,7 +7,9 @@ public class PlayerArmorInventory : MonoBehaviour
     public PlayerArmor playerArmor;
 
     [Header("Inventory")]
-    public int maxArmorItems = 1;
+    [Tooltip("Legacy value only. The real limit is the number of empty hotbar slots.")]
+    public int maxArmorItems = 999;
+
     public List<ArmorItemType> armorItems = new List<ArmorItemType>();
 
     [Header("Selected")]
@@ -18,90 +20,122 @@ public class PlayerArmorInventory : MonoBehaviour
 
     private void Awake()
     {
-        if (playerArmor == null)
-            playerArmor = GetComponent<PlayerArmor>();
-
-        if (maxArmorItems <= 0)
-            maxArmorItems = 1;
+        FindPlayerArmor();
+        FixSelectedIndex();
     }
 
-    private void OnValidate()
+    private void FindPlayerArmor()
     {
-        if (maxArmorItems <= 0)
-            maxArmorItems = 1;
+        if (playerArmor != null)
+            return;
+
+        playerArmor = GetComponent<PlayerArmor>();
+
+        if (playerArmor == null)
+            playerArmor = GetComponentInParent<PlayerArmor>();
+
+        if (playerArmor == null)
+            playerArmor = GetComponentInChildren<PlayerArmor>(true);
+
+        if (playerArmor == null)
+            playerArmor = FindFirstObjectByType<PlayerArmor>();
     }
 
     public bool HasArmorItem()
     {
-        return armorItems.Count > 0;
+        return armorItems != null && armorItems.Count > 0;
     }
 
     public int GetItemCount()
     {
-        return armorItems.Count;
+        return armorItems == null ? 0 : armorItems.Count;
+    }
+
+    public bool CanAddArmorItem()
+    {
+        // WeaponSwitcher checks whether an empty hotbar slot exists.
+        return true;
     }
 
     public bool AddArmorItem(ArmorItemType armorType)
     {
-        if (armorItems.Count >= maxArmorItems)
-        {
-            Debug.Log("Armor inventory full. You can carry only 1 armor item in slot 7.");
-            return false;
-        }
+        if (armorItems == null)
+            armorItems = new List<ArmorItemType>();
 
         armorItems.Add(armorType);
-        selectedIndex = 0;
+        selectedIndex = armorItems.Count - 1;
 
-        Debug.Log("ARMOR ADDED TO SLOT 7: " + armorType);
+        if (debugMessages)
+        {
+            Debug.Log(
+                "ARMOR ADDED: " + armorType +
+                " | Stored armor items: " + armorItems.Count
+            );
+        }
 
         return true;
     }
 
     public ArmorItemType GetSelectedArmor()
     {
-        if (armorItems.Count <= 0)
+        if (!HasArmorItem())
             return ArmorItemType.Strong100;
 
-        selectedIndex = Mathf.Clamp(selectedIndex, 0, armorItems.Count - 1);
-
+        FixSelectedIndex();
         return armorItems[selectedIndex];
+    }
+
+    public ArmorItemType GetArmorAtIndex(int index)
+    {
+        if (armorItems == null || index < 0 || index >= armorItems.Count)
+            return ArmorItemType.Strong100;
+
+        return armorItems[index];
     }
 
     public void SelectNextArmor()
     {
-        if (armorItems.Count <= 0)
+        if (!HasArmorItem())
             return;
 
-        selectedIndex = 0;
+        selectedIndex++;
 
-        Debug.Log("Selected armor: " + GetSelectedArmor());
+        if (selectedIndex >= armorItems.Count)
+            selectedIndex = 0;
+    }
+
+    public void SelectPreviousArmor()
+    {
+        if (!HasArmorItem())
+            return;
+
+        selectedIndex--;
+
+        if (selectedIndex < 0)
+            selectedIndex = armorItems.Count - 1;
     }
 
     public bool CanUseSelectedArmor()
     {
-        if (armorItems.Count <= 0)
-        {
-            Debug.Log("No armor item in slot 7.");
+        if (!HasArmorItem())
             return false;
-        }
+
+        FindPlayerArmor();
 
         if (playerArmor == null)
         {
-            Debug.LogWarning("PlayerArmor missing.");
+            Debug.LogWarning("PlayerArmor is missing.");
             return false;
         }
 
-        if (playerArmor.hasArmor && playerArmor.currentArmor > 0f)
+        if (playerArmor.IsArmorActive)
         {
-            Debug.Log(
-                "You already have armor equipped: " +
-                playerArmor.equippedArmorType +
-                " | Armor left: " +
-                playerArmor.currentArmor +
-                " / " +
-                playerArmor.maxArmor +
-                ". Wait until it breaks before using another armor."
-            );
+            if (debugMessages)
+            {
+                Debug.Log(
+                    "Armor is already equipped. Wait until it breaks before using another armor."
+                );
+            }
 
             return false;
         }
@@ -114,17 +148,42 @@ public class PlayerArmorInventory : MonoBehaviour
         if (!CanUseSelectedArmor())
             return false;
 
-        selectedIndex = Mathf.Clamp(selectedIndex, 0, armorItems.Count - 1);
+        FixSelectedIndex();
 
         ArmorItemType armorType = armorItems[selectedIndex];
 
+        // EquipArmor changes only armor health, never player HP.
         playerArmor.EquipArmor(armorType);
 
         armorItems.RemoveAt(selectedIndex);
-        selectedIndex = 0;
+        FixSelectedIndex();
 
-        Debug.Log("USED ARMOR: " + armorType);
+        if (debugMessages)
+            Debug.Log("USED ARMOR: " + armorType);
 
         return true;
+    }
+
+    public bool UseArmorAtIndex(int index)
+    {
+        if (armorItems == null || index < 0 || index >= armorItems.Count)
+            return false;
+
+        selectedIndex = index;
+        return UseSelectedArmor();
+    }
+
+    private void FixSelectedIndex()
+    {
+        if (armorItems == null)
+            armorItems = new List<ArmorItemType>();
+
+        if (armorItems.Count <= 0)
+        {
+            selectedIndex = 0;
+            return;
+        }
+
+        selectedIndex = Mathf.Clamp(selectedIndex, 0, armorItems.Count - 1);
     }
 }

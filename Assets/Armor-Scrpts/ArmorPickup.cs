@@ -21,7 +21,7 @@ public class ArmorPickup : MonoBehaviour
     public bool debugMessages = true;
 
     private Transform player;
-    private PlayerArmorInventory armorInventory;
+    private WeaponSwitcher weaponSwitcher;
     private Vector3 startLocalPosition;
     private bool pickedUp;
 
@@ -30,29 +30,11 @@ public class ArmorPickup : MonoBehaviour
         if (randomArmorType)
             armorType = GetRandomArmorType();
 
-        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
-
-        if (playerObject == null)
-        {
-            Debug.LogWarning(gameObject.name + " cannot find Player tag.");
-            return;
-        }
-
-        player = playerObject.transform;
-        armorInventory = playerObject.GetComponent<PlayerArmorInventory>();
-
-        if (armorInventory == null)
-        {
-            Debug.LogWarning("Player does not have PlayerArmorInventory.");
-            return;
-        }
-
         if (modelToAnimate == null)
             modelToAnimate = transform;
 
         startLocalPosition = modelToAnimate.localPosition;
-
-        Debug.Log(gameObject.name + " armor pickup ready. Final type: " + armorType);
+        FindReferences();
     }
 
     private void Update()
@@ -62,16 +44,82 @@ public class ArmorPickup : MonoBehaviour
         if (pickedUp)
             return;
 
-        if (player == null || armorInventory == null)
+        if (player == null || weaponSwitcher == null)
+        {
+            FindReferences();
             return;
+        }
 
-        float distance = Vector3.Distance(transform.position, player.position);
+        float distance = Vector3.Distance(
+            transform.position,
+            player.position
+        );
 
         if (distance > pickupDistance)
             return;
 
         if (Input.GetKeyDown(pickupKey))
-            PickupArmor();
+            TryPickupArmor();
+    }
+
+    private void FindReferences()
+    {
+        GameObject playerObject =
+            GameObject.FindGameObjectWithTag("Player");
+
+        if (playerObject == null)
+        {
+            if (debugMessages)
+                Debug.LogWarning(gameObject.name + " cannot find Player tag.");
+
+            return;
+        }
+
+        player = playerObject.transform;
+
+        weaponSwitcher =
+            playerObject.GetComponentInChildren<WeaponSwitcher>(true);
+
+        if (weaponSwitcher == null)
+            weaponSwitcher = playerObject.GetComponentInParent<WeaponSwitcher>();
+
+        if (weaponSwitcher == null)
+            weaponSwitcher = FindFirstObjectByType<WeaponSwitcher>();
+
+        if (weaponSwitcher == null && debugMessages)
+            Debug.LogWarning(gameObject.name + " cannot find WeaponSwitcher.");
+    }
+
+    private void TryPickupArmor()
+    {
+        if (weaponSwitcher == null)
+        {
+            Debug.LogWarning("ArmorPickup cannot find WeaponSwitcher.");
+            return;
+        }
+
+        bool added = weaponSwitcher.TryAddArmorItem(armorType);
+
+        if (!added)
+        {
+            if (debugMessages)
+            {
+                Debug.Log(
+                    "Cannot pick up armor " + armorType +
+                    ". There is no empty hotbar slot."
+                );
+            }
+
+            return;
+        }
+
+        pickedUp = true;
+
+        if (debugMessages)
+            Debug.Log("Picked armor: " + armorType);
+
+        if (destroyAfterPickup)
+            Destroy(gameObject);
     }
 
     private void AnimatePickup()
@@ -79,42 +127,30 @@ public class ArmorPickup : MonoBehaviour
         if (modelToAnimate == null)
             return;
 
-        modelToAnimate.Rotate(Vector3.up * rotateSpeed * Time.deltaTime, Space.World);
+        modelToAnimate.Rotate(
+            Vector3.up * rotateSpeed * Time.deltaTime,
+            Space.World
+        );
 
-        Vector3 pos = startLocalPosition;
-        pos.y += Mathf.Sin(Time.time * bobSpeed) * bobAmount;
-
-        modelToAnimate.localPosition = pos;
-    }
-
-    private void PickupArmor()
-    {
-        bool added = armorInventory.AddArmorItem(armorType);
-
-        if (!added)
-            return;
-
-        pickedUp = true;
-
-        Debug.Log("PICKED ARMOR: " + armorType);
-
-        if (destroyAfterPickup)
-            Destroy(gameObject);
+        Vector3 position = startLocalPosition;
+        position.y += Mathf.Sin(Time.time * bobSpeed) * bobAmount;
+        modelToAnimate.localPosition = position;
     }
 
     private ArmorItemType GetRandomArmorType()
     {
-        int random = Random.Range(0, 4);
+        int randomValue = Random.Range(0, 4);
 
-        if (random == 0)
-            return ArmorItemType.Strong100;
-
-        if (random == 1)
-            return ArmorItemType.Strong50;
-
-        if (random == 2)
-            return ArmorItemType.Weak100;
-
-        return ArmorItemType.Weak50;
+        switch (randomValue)
+        {
+            case 0:
+                return ArmorItemType.Strong100;
+            case 1:
+                return ArmorItemType.Strong50;
+            case 2:
+                return ArmorItemType.Weak100;
+            default:
+                return ArmorItemType.Weak50;
+        }
     }
 }

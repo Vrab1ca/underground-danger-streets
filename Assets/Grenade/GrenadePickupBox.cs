@@ -2,60 +2,138 @@ using UnityEngine;
 
 public class GrenadePickupBox : MonoBehaviour
 {
-    [Header("Pickup")]
+    [Header("Grenade")]
     public GrenadeType grenadeType = GrenadeType.Normal;
     public int amount = 1;
+
+    [Header("Pickup")]
     public KeyCode pickupKey = KeyCode.F;
     public float pickupDistance = 3f;
-
-    [Header("Destroy")]
     public bool destroyAfterPickup = true;
 
-    private PlayerGrenadeInventory inventory;
+    [Header("Optional Animation")]
+    public Transform modelToAnimate;
+    public float rotateSpeed = 70f;
+    public float bobSpeed = 2f;
+    public float bobAmount = 0.1f;
+
+    private WeaponSwitcher weaponSwitcher;
     private Transform player;
+    private Vector3 startLocalPosition;
+    private bool pickedUp;
 
     private void Start()
     {
-        inventory = FindFirstObjectByType<PlayerGrenadeInventory>();
+        FindPlayerAndInventory();
 
-        if (inventory != null)
-            player = inventory.transform;
+        if (modelToAnimate == null)
+            modelToAnimate = transform;
+
+        startLocalPosition = modelToAnimate.localPosition;
     }
 
     private void Update()
     {
-        if (inventory == null || player == null)
+        AnimatePickup();
+
+        if (pickedUp)
             return;
 
-        float distance = Vector3.Distance(transform.position, player.position);
+        if (weaponSwitcher == null || player == null)
+        {
+            FindPlayerAndInventory();
+            return;
+        }
+
+        float distance = Vector3.Distance(
+            transform.position,
+            player.position
+        );
 
         if (distance > pickupDistance)
             return;
 
         if (Input.GetKeyDown(pickupKey))
+            TryPickup();
+    }
+
+    private void FindPlayerAndInventory()
+    {
+        GameObject playerObject =
+            GameObject.FindGameObjectWithTag("Player");
+
+        if (playerObject != null)
         {
-            PickupGrenades();
+            player = playerObject.transform;
+
+            weaponSwitcher =
+                playerObject.GetComponentInChildren<WeaponSwitcher>();
+        }
+
+        if (weaponSwitcher == null)
+        {
+            weaponSwitcher =
+                FindFirstObjectByType<WeaponSwitcher>();
         }
     }
 
-    private void PickupGrenades()
+    private void TryPickup()
     {
-        int before = inventory.GetGrenadeCount(grenadeType);
-
-        inventory.AddGrenade(grenadeType, amount);
-
-        int after = inventory.GetGrenadeCount(grenadeType);
-
-        if (after > before)
+        if (weaponSwitcher == null)
         {
-            Debug.Log("Picked up " + amount + " " + grenadeType + ". Now: " + after);
+            Debug.LogWarning(
+                "GrenadePickupBox cannot find WeaponSwitcher."
+            );
 
-            if (destroyAfterPickup)
-                Destroy(gameObject);
+            return;
         }
-        else
+
+        bool added = weaponSwitcher.TryAddGrenades(
+            grenadeType,
+            amount
+        );
+
+        if (!added)
         {
-            Debug.Log("Cannot pick up " + grenadeType + ". Inventory full.");
+            Debug.Log(
+                "Cannot pick up " +
+                grenadeType +
+                ". Hotbar or grenade inventory is full."
+            );
+
+            return;
         }
+
+        pickedUp = true;
+
+        Debug.Log(
+            "Picked up " +
+            amount +
+            " " +
+            grenadeType +
+            "."
+        );
+
+        if (destroyAfterPickup)
+            Destroy(gameObject);
+    }
+
+    private void AnimatePickup()
+    {
+        if (modelToAnimate == null)
+            return;
+
+        modelToAnimate.Rotate(
+            Vector3.up * rotateSpeed * Time.deltaTime,
+            Space.World
+        );
+
+        Vector3 position = startLocalPosition;
+
+        position.y +=
+            Mathf.Sin(Time.time * bobSpeed) *
+            bobAmount;
+
+        modelToAnimate.localPosition = position;
     }
 }

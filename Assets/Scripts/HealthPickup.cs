@@ -16,30 +16,17 @@ public class HealthPickup : MonoBehaviour
     public float bobSpeed = 2f;
     public float bobAmount = 0.15f;
 
-    private GameObject playerObject;
+    [Header("Debug")]
+    public bool debugMessages = true;
+
+    private WeaponSwitcher weaponSwitcher;
     private Transform player;
-    private PlayerHealthInventory inventory;
     private Vector3 startLocalPosition;
     private bool pickedUp;
 
     private void Start()
     {
-        playerObject = GameObject.FindGameObjectWithTag("Player");
-
-        if (playerObject == null)
-        {
-            Debug.LogWarning("HealthPickup cannot find object with Player tag.");
-            return;
-        }
-
-        player = playerObject.transform;
-        inventory = playerObject.GetComponent<PlayerHealthInventory>();
-
-        if (inventory == null)
-        {
-            Debug.LogWarning("Player does not have PlayerHealthInventory.");
-            return;
-        }
+        FindReferences();
 
         if (modelToAnimate == null)
             modelToAnimate = transform;
@@ -54,8 +41,11 @@ public class HealthPickup : MonoBehaviour
         if (pickedUp)
             return;
 
-        if (player == null || inventory == null)
+        if (weaponSwitcher == null || player == null)
+        {
+            FindReferences();
             return;
+        }
 
         float distance = Vector3.Distance(transform.position, player.position);
 
@@ -63,9 +53,52 @@ public class HealthPickup : MonoBehaviour
             return;
 
         if (Input.GetKeyDown(pickupKey))
-        {
             TryPickup();
+    }
+
+    private void FindReferences()
+    {
+        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
+
+        if (playerObject == null)
+            return;
+
+        player = playerObject.transform;
+        weaponSwitcher = playerObject.GetComponentInChildren<WeaponSwitcher>(true);
+
+        if (weaponSwitcher == null)
+            weaponSwitcher = playerObject.GetComponentInParent<WeaponSwitcher>();
+
+        if (weaponSwitcher == null)
+            weaponSwitcher = FindFirstObjectByType<WeaponSwitcher>();
+    }
+
+    private void TryPickup()
+    {
+        if (weaponSwitcher == null)
+        {
+            Debug.LogWarning("HealthPickup cannot find WeaponSwitcher.");
+            return;
         }
+
+        // WeaponSwitcher puts this exact health item into one new empty slot.
+        bool added = weaponSwitcher.TryAddHealthItem(itemType);
+
+        if (!added)
+        {
+            if (debugMessages)
+                Debug.Log("Cannot pick up health item. No empty hotbar slot.");
+
+            return;
+        }
+
+        pickedUp = true;
+
+        if (debugMessages)
+            Debug.Log("Picked health item: " + itemType);
+
+        if (destroyAfterPickup)
+            Destroy(gameObject);
     }
 
     private void AnimatePickup()
@@ -73,29 +106,13 @@ public class HealthPickup : MonoBehaviour
         if (modelToAnimate == null)
             return;
 
-        modelToAnimate.Rotate(Vector3.up * rotateSpeed * Time.deltaTime, Space.World);
+        modelToAnimate.Rotate(
+            Vector3.up * rotateSpeed * Time.deltaTime,
+            Space.World
+        );
 
-        Vector3 pos = startLocalPosition;
-        pos.y += Mathf.Sin(Time.time * bobSpeed) * bobAmount;
-
-        modelToAnimate.localPosition = pos;
-    }
-
-    private void TryPickup()
-    {
-        bool added = inventory.AddHealthItem(itemType);
-
-        if (!added)
-        {
-            Debug.Log("Cannot pick health item. Inventory full.");
-            return;
-        }
-
-        pickedUp = true;
-
-        Debug.Log("PICKED HEALTH BOX: " + itemType + " | Health inventory now: " + inventory.GetItemCount() + " / " + inventory.maxHealthItems);
-
-        if (destroyAfterPickup)
-            Destroy(gameObject);
+        Vector3 position = startLocalPosition;
+        position.y += Mathf.Sin(Time.time * bobSpeed) * bobAmount;
+        modelToAnimate.localPosition = position;
     }
 }

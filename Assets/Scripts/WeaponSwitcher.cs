@@ -1,13 +1,34 @@
-using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class WeaponSwitcher : MonoBehaviour
 {
+    public enum HotbarItemType
+    {
+        Empty,
+        Weapon,
+        NormalGrenade,
+        Molotov,
+        JumpPlatform,
+        Health,
+        Armor,
+        Flashlight,
+        Battery
+    }
+
+    // Kept so older scripts that reference QuickSlot still compile.
     public enum QuickSlot
     {
+        Hands,
         Weapon1,
         Weapon2,
+        Weapon3,
+        Weapon4,
+        Weapon5,
+        Weapon6,
+        Weapon7,
+        Weapon8,
         NormalGrenade,
         Molotov,
         JumpPlatform,
@@ -15,14 +36,32 @@ public class WeaponSwitcher : MonoBehaviour
         HealthItem2,
         HealthItem3,
         HealthItem4,
-        ArmorItem
+        ArmorItem,
+        Flashlight,
+        Battery
     }
 
-    [Header("Selected Slot")]
-    public QuickSlot selectedSlot = QuickSlot.Weapon1;
+    private class RuntimeHotbarSlot
+    {
+        public HotbarItemType itemType = HotbarItemType.Empty;
+        public Weapon weapon;
+        public HealthItemType healthType = HealthItemType.Small20;
+        public ArmorItemType armorType = ArmorItemType.Strong100;
+        public FlashlightBatteryType batteryType = FlashlightBatteryType.A;
+    }
 
-    [Header("Weapons")]
-    public int maxWeapons = 2;
+    [Header("Dynamic Hotbar")]
+    [Range(1, 8)]
+    public int slotCount = 5;
+
+    [Tooltip("-1 means the separate fists/hands mode.")]
+    public int selectedHotbarIndex = -1;
+
+    [Header("Legacy Selected Value")]
+    public QuickSlot selectedSlot = QuickSlot.Hands;
+
+    [Header("Normal Hands - Not Inventory")]
+    public GameObject handsVisual;
 
     [Header("Camera References")]
     public Camera fpsCamera;
@@ -51,169 +90,196 @@ public class WeaponSwitcher : MonoBehaviour
     public GameObject armorVisual;
     public ArmorHandVisual armorHandVisual;
 
-    [Header("Drop Weapon")]
-    public Transform dropPoint;
+    [Header("Armor Pickup")]
+    [Tooltip("When disabled, picking up armor adds it to a slot but keeps fists active.")]
+    public bool autoSelectPickedArmor = false;
+
+    [Header("Flashlight")]
+    public PlayerFlashlightInventory flashlightInventory;
+
+    [Header("Battery Hand Visuals - Optional")]
+    [Tooltip("Optional model shown when an A battery slot is selected.")]
+    public GameObject batteryAVisual;
+
+    [Tooltip("Optional model shown when an AA battery slot is selected.")]
+    public GameObject batteryAAVisual;
+
+    [Tooltip("Optional model shown when an AAA battery slot is selected.")]
+    public GameObject batteryAAAVisual;
+
+    [Header("Battery Reload")]
+    public KeyCode batteryUseKey = KeyCode.R;
+
+    [Tooltip("When disabled, picking up a battery does not force-select it.")]
+    public bool autoSelectPickedBattery = false;
+
+    [Tooltip("After using a battery, automatically select the flashlight slot.")]
+    public bool autoSelectFlashlightAfterReload = true;
+
+    [Header("Controls")]
+    public KeyCode handsKey = KeyCode.Q;
     public KeyCode dropKey = KeyCode.G;
 
-    [Header("Scroll")]
+    [Header("Drop Weapon")]
+    public Transform dropPoint;
+
+    [Header("Mouse Scroll")]
     public float scrollCooldown = 0.08f;
 
     [Header("Debug")]
     public bool debugHotbar = true;
 
-    private int selectedWeaponIndex;
+    private readonly List<RuntimeHotbarSlot> slots =
+        new List<RuntimeHotbarSlot>();
+
+    private static readonly KeyCode[] NumberKeys =
+    {
+        KeyCode.Alpha1,
+        KeyCode.Alpha2,
+        KeyCode.Alpha3,
+        KeyCode.Alpha4,
+        KeyCode.Alpha5,
+        KeyCode.Alpha6,
+        KeyCode.Alpha7,
+        KeyCode.Alpha8
+    };
+
     private float nextScrollTime;
     private bool usingHealthItem;
     private bool usingArmorItem;
 
-    private QuickSlot[] slotOrder =
+    public int SlotCount
     {
-        QuickSlot.Weapon1,
-        QuickSlot.Weapon2,
-        QuickSlot.NormalGrenade,
-        QuickSlot.Molotov,
-        QuickSlot.JumpPlatform,
-        QuickSlot.HealthItem1,
-        QuickSlot.HealthItem2,
-        QuickSlot.HealthItem3,
-        QuickSlot.HealthItem4,
-        QuickSlot.ArmorItem
-    };
+        get
+        {
+            if (slots.Count > 0)
+                return slots.Count;
+
+            return Mathf.Clamp(slotCount, 1, 8);
+        }
+    }
+
+    public bool HandsActive
+    {
+        get
+        {
+            if (selectedHotbarIndex < 0 ||
+                selectedHotbarIndex >= slots.Count)
+            {
+                return true;
+            }
+
+            return slots[selectedHotbarIndex].itemType ==
+                   HotbarItemType.Empty;
+        }
+    }
+
+    public int InventoryWeaponCount
+    {
+        get { return GetWeaponCount(); }
+    }
+
+    private void OnValidate()
+    {
+        slotCount = Mathf.Clamp(slotCount, 1, 8);
+    }
 
     private void Start()
     {
         AutoFindReferences();
-        SelectFirstAvailableSlot();
+        CreateEmptyRuntimeSlots();
+
+        // Fists are separate from the inventory.
+        SelectHands();
     }
 
     private void Update()
     {
         AutoFindReferences();
 
+        if (usingHealthItem || usingArmorItem)
+            return;
+
         HandleNumberKeys();
+        HandleHandsKey();
         HandleScroll();
         HandleDropWeapon();
-        HandleUseSelectedSlot();
+        HandleUseSelectedBattery();
+        HandleUseSelectedItem();
+    }
 
-        if (!IsSlotAvailable(selectedSlot))
-            SelectFirstAvailableSlot();
+    private void CreateEmptyRuntimeSlots()
+    {
+        slots.Clear();
+
+        int safeCount = Mathf.Clamp(slotCount, 1, 8);
+
+        for (int i = 0; i < safeCount; i++)
+            slots.Add(new RuntimeHotbarSlot());
     }
 
     private void AutoFindReferences()
     {
+        if (fpsCamera == null)
+            fpsCamera = Camera.main;
+
         if (grenadeInventory == null)
-            grenadeInventory = FindFirstObjectByType<PlayerGrenadeInventory>();
+            grenadeInventory =
+                FindFirstObjectByType<PlayerGrenadeInventory>();
 
         if (jumpPlatformInventory == null)
-            jumpPlatformInventory = FindFirstObjectByType<JumpPlatformInventory>();
+            jumpPlatformInventory =
+                FindFirstObjectByType<JumpPlatformInventory>();
 
         if (healthInventory == null)
-            healthInventory = FindFirstObjectByType<PlayerHealthInventory>();
+            healthInventory =
+                FindFirstObjectByType<PlayerHealthInventory>();
 
         if (armorInventory == null)
-            armorInventory = FindFirstObjectByType<PlayerArmorInventory>();
+            armorInventory =
+                FindFirstObjectByType<PlayerArmorInventory>();
+
+        if (flashlightInventory == null)
+            flashlightInventory =
+                FindFirstObjectByType<PlayerFlashlightInventory>();
     }
+
+    // =========================================================
+    // INPUT
+    // =========================================================
 
     private void HandleNumberKeys()
     {
-        if (Input.GetKeyDown(KeyCode.Alpha1))
-            SelectSlotByButton(QuickSlot.Weapon1);
+        int keyCount = Mathf.Min(slots.Count, NumberKeys.Length);
 
-        if (Input.GetKeyDown(KeyCode.Alpha2))
-            SelectSlotByButton(QuickSlot.Weapon2);
-
-        if (Input.GetKeyDown(KeyCode.Alpha3))
-            SelectSlotByButton(QuickSlot.NormalGrenade);
-
-        if (Input.GetKeyDown(KeyCode.Alpha4))
-            SelectSlotByButton(QuickSlot.Molotov);
-
-        if (Input.GetKeyDown(KeyCode.Alpha5))
-            SelectSlotByButton(QuickSlot.JumpPlatform);
-
-        if (Input.GetKeyDown(KeyCode.Alpha6))
-            SelectOrCycleHealthSlot();
-
-        if (Input.GetKeyDown(KeyCode.Alpha7))
-            SelectOrCycleArmorSlot();
+        for (int i = 0; i < keyCount; i++)
+        {
+            if (Input.GetKeyDown(NumberKeys[i]))
+            {
+                SelectHotbarIndex(i);
+                return;
+            }
+        }
     }
 
-    private void SelectOrCycleHealthSlot()
+    private void HandleHandsKey()
     {
-        if (healthInventory == null || healthInventory.GetItemCount() <= 0)
-        {
-            Debug.Log("No health items.");
-            return;
-        }
-
-        if (!IsHealthSlot(selectedSlot))
-        {
-            SelectSlot(QuickSlot.HealthItem1);
-            return;
-        }
-
-        if (selectedSlot == QuickSlot.HealthItem1 && IsSlotAvailable(QuickSlot.HealthItem2))
-        {
-            SelectSlot(QuickSlot.HealthItem2);
-            return;
-        }
-
-        if (selectedSlot == QuickSlot.HealthItem2 && IsSlotAvailable(QuickSlot.HealthItem3))
-        {
-            SelectSlot(QuickSlot.HealthItem3);
-            return;
-        }
-
-        if (selectedSlot == QuickSlot.HealthItem3 && IsSlotAvailable(QuickSlot.HealthItem4))
-        {
-            SelectSlot(QuickSlot.HealthItem4);
-            return;
-        }
-
-        SelectSlot(QuickSlot.HealthItem1);
-    }
-
-    private void SelectOrCycleArmorSlot()
-    {
-        if (armorInventory == null || !armorInventory.HasArmorItem())
-        {
-            Debug.Log("No armor items.");
-            return;
-        }
-
-        if (selectedSlot == QuickSlot.ArmorItem)
-        {
-            armorInventory.SelectNextArmor();
-            RefreshVisuals();
-            return;
-        }
-
-        SelectSlot(QuickSlot.ArmorItem);
-    }
-
-    private void SelectSlotByButton(QuickSlot slot)
-    {
-        if (!IsSlotAvailable(slot))
-        {
-            Debug.Log("This slot is empty: " + slot);
-            return;
-        }
-
-        SelectSlot(slot);
+        if (Input.GetKeyDown(handsKey))
+            SelectHands();
     }
 
     private void HandleScroll()
     {
-        if (usingHealthItem || usingArmorItem)
-            return;
-
         if (Time.time < nextScrollTime)
             return;
 
         Weapon activeWeapon = GetActiveWeapon();
 
-        if (activeWeapon != null && activeWeapon.IsSniperZooming())
+        if (activeWeapon != null &&
+            activeWeapon.IsSniperZooming())
+        {
             return;
+        }
 
         float scroll = Input.mouseScrollDelta.y;
 
@@ -225,201 +291,236 @@ public class WeaponSwitcher : MonoBehaviour
 
         nextScrollTime = Time.time + scrollCooldown;
 
-        if (scroll > 0f)
-            ScrollHotbar(1);
-        else
-            ScrollHotbar(-1);
+        int direction = scroll > 0f ? 1 : -1;
+        ScrollHotbar(direction);
     }
 
     private void ScrollHotbar(int direction)
     {
-        int currentIndex = System.Array.IndexOf(slotOrder, selectedSlot);
-
-        if (currentIndex < 0)
-            currentIndex = 0;
-
-        for (int i = 1; i <= slotOrder.Length; i++)
+        if (slots.Count <= 0)
         {
-            int nextIndex = currentIndex + direction * i;
-
-            while (nextIndex < 0)
-                nextIndex += slotOrder.Length;
-
-            while (nextIndex >= slotOrder.Length)
-                nextIndex -= slotOrder.Length;
-
-            QuickSlot candidateSlot = slotOrder[nextIndex];
-
-            bool available = IsSlotAvailable(candidateSlot);
-
-            if (debugHotbar)
-                Debug.Log("Scroll check: " + candidateSlot + " | Available = " + available);
-
-            if (available)
-            {
-                SelectSlot(candidateSlot);
-                return;
-            }
-        }
-
-        Debug.Log("No available hotbar slot.");
-    }
-
-    private void SelectFirstAvailableSlot()
-    {
-        for (int i = 0; i < slotOrder.Length; i++)
-        {
-            if (IsSlotAvailable(slotOrder[i]))
-            {
-                SelectSlot(slotOrder[i]);
-                return;
-            }
-        }
-
-        HideEverything();
-    }
-
-    public void SelectSlot(QuickSlot slot)
-    {
-        if (!IsSlotAvailable(slot))
-        {
-            Debug.Log("Cannot select empty slot: " + slot);
+            SelectHands();
             return;
         }
 
-        selectedSlot = slot;
+        int nextIndex;
 
-        if (selectedSlot == QuickSlot.Weapon1)
-            selectedWeaponIndex = 0;
+        if (selectedHotbarIndex < 0)
+        {
+            nextIndex = direction > 0
+                ? 0
+                : slots.Count - 1;
+        }
+        else
+        {
+            nextIndex = selectedHotbarIndex + direction;
 
-        if (selectedSlot == QuickSlot.Weapon2)
-            selectedWeaponIndex = 1;
+            if (nextIndex < 0)
+                nextIndex = slots.Count - 1;
 
-        if (selectedSlot == QuickSlot.NormalGrenade && grenadeInventory != null)
-            grenadeInventory.SelectNormalGrenade();
+            if (nextIndex >= slots.Count)
+                nextIndex = 0;
+        }
 
-        if (selectedSlot == QuickSlot.Molotov && grenadeInventory != null)
-            grenadeInventory.SelectMolotov();
+        SelectHotbarIndex(nextIndex);
+    }
 
-        if (IsHealthSlot(selectedSlot) && healthInventory != null)
-            healthInventory.selectedIndex = GetHealthIndexFromSlot(selectedSlot);
+    // =========================================================
+    // SELECTION
+    // =========================================================
+
+    public void SelectHands()
+    {
+        selectedHotbarIndex = -1;
+        selectedSlot = QuickSlot.Hands;
 
         RefreshVisuals();
 
-        Debug.Log("SELECTED HOTBAR SLOT: " + selectedSlot);
+        if (debugHotbar)
+            Debug.Log("Selected normal fists. Fists are not an inventory slot.");
     }
 
-    private bool IsSlotAvailable(QuickSlot slot)
+    public void SelectHotbarIndex(int index)
     {
-        Weapon[] weapons = GetWeapons();
+        if (index < 0 || index >= slots.Count)
+            return;
 
-        if (slot == QuickSlot.Weapon1)
-            return weapons.Length >= 1;
+        bool selectedSameSlot =
+            selectedHotbarIndex == index;
 
-        if (slot == QuickSlot.Weapon2)
-            return weapons.Length >= 2;
+        selectedHotbarIndex = index;
 
-        if (slot == QuickSlot.NormalGrenade)
+        if (selectedSameSlot)
+            CycleItemInsideSlot(slots[index].itemType);
+
+        UpdateLegacySelectedSlot();
+        RefreshVisuals();
+
+        if (debugHotbar)
         {
-            if (grenadeInventory == null)
-                return false;
-
-            return grenadeInventory.GetGrenadeCount(GrenadeType.Normal) > 0;
+            Debug.Log(
+                "Selected hotbar Slot " +
+                (index + 1) +
+                ": " +
+                GetSlotTitle(index)
+            );
         }
-
-        if (slot == QuickSlot.Molotov)
-        {
-            if (grenadeInventory == null)
-                return false;
-
-            return grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) > 0;
-        }
-
-        if (slot == QuickSlot.JumpPlatform)
-        {
-            if (jumpPlatformInventory == null)
-                return false;
-
-            return jumpPlatformInventory.GetPlatformCount() > 0;
-        }
-
-        if (IsHealthSlot(slot))
-        {
-            if (healthInventory == null)
-                return false;
-
-            int healthIndex = GetHealthIndexFromSlot(slot);
-
-            return healthInventory.GetItemCount() > healthIndex;
-        }
-
-        if (slot == QuickSlot.ArmorItem)
-        {
-            if (armorInventory == null)
-                return false;
-
-            return armorInventory.HasArmorItem();
-        }
-
-        return false;
     }
 
-    private bool IsHealthSlot(QuickSlot slot)
+    private void CycleItemInsideSlot(HotbarItemType itemType)
     {
-        return slot == QuickSlot.HealthItem1 ||
-               slot == QuickSlot.HealthItem2 ||
-               slot == QuickSlot.HealthItem3 ||
-               slot == QuickSlot.HealthItem4;
+        // Health and armor do not cycle inside one slot.
+        // Every collected health or armor item uses a separate slot.
     }
 
-    private int GetHealthIndexFromSlot(QuickSlot slot)
+    private void UpdateLegacySelectedSlot()
     {
-        if (slot == QuickSlot.HealthItem1)
-            return 0;
+        if (HandsActive)
+        {
+            selectedSlot = QuickSlot.Hands;
+            return;
+        }
 
-        if (slot == QuickSlot.HealthItem2)
-            return 1;
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
 
-        if (slot == QuickSlot.HealthItem3)
-            return 2;
+        switch (slot.itemType)
+        {
+            case HotbarItemType.Weapon:
+                selectedSlot = GetLegacyWeaponSlot(selectedHotbarIndex);
+                break;
 
-        if (slot == QuickSlot.HealthItem4)
-            return 3;
+            case HotbarItemType.NormalGrenade:
+                selectedSlot = QuickSlot.NormalGrenade;
+                break;
 
-        return 0;
+            case HotbarItemType.Molotov:
+                selectedSlot = QuickSlot.Molotov;
+                break;
+
+            case HotbarItemType.JumpPlatform:
+                selectedSlot = QuickSlot.JumpPlatform;
+                break;
+
+            case HotbarItemType.Health:
+                selectedSlot = GetLegacyHealthSlot();
+                break;
+
+            case HotbarItemType.Armor:
+                selectedSlot = QuickSlot.ArmorItem;
+                break;
+
+            case HotbarItemType.Flashlight:
+                selectedSlot = QuickSlot.Flashlight;
+                break;
+
+            case HotbarItemType.Battery:
+                selectedSlot = QuickSlot.Battery;
+                break;
+
+            default:
+                selectedSlot = QuickSlot.Hands;
+                break;
+        }
     }
+
+    private QuickSlot GetLegacyWeaponSlot(int index)
+    {
+        switch (index)
+        {
+            case 0: return QuickSlot.Weapon1;
+            case 1: return QuickSlot.Weapon2;
+            case 2: return QuickSlot.Weapon3;
+            case 3: return QuickSlot.Weapon4;
+            case 4: return QuickSlot.Weapon5;
+            case 5: return QuickSlot.Weapon6;
+            case 6: return QuickSlot.Weapon7;
+            case 7: return QuickSlot.Weapon8;
+            default: return QuickSlot.Hands;
+        }
+    }
+
+    private QuickSlot GetLegacyHealthSlot()
+    {
+        if (healthInventory == null)
+            return QuickSlot.HealthItem1;
+
+        switch (healthInventory.selectedIndex)
+        {
+            case 0: return QuickSlot.HealthItem1;
+            case 1: return QuickSlot.HealthItem2;
+            case 2: return QuickSlot.HealthItem3;
+            case 3: return QuickSlot.HealthItem4;
+            default: return QuickSlot.HealthItem1;
+        }
+    }
+
+    // =========================================================
+    // VISUALS
+    // =========================================================
 
     private void RefreshVisuals()
     {
         HideEverything();
 
-        if (selectedSlot == QuickSlot.Weapon1 || selectedSlot == QuickSlot.Weapon2)
-            ShowSelectedWeapon();
+        if (HandsActive)
+        {
+            ShowHands();
+            return;
+        }
 
-        if (selectedSlot == QuickSlot.NormalGrenade)
-            ShowNormalGrenade();
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
 
-        if (selectedSlot == QuickSlot.Molotov)
-            ShowMolotov();
+        switch (slot.itemType)
+        {
+            case HotbarItemType.Weapon:
+                if (slot.weapon != null)
+                    slot.weapon.gameObject.SetActive(true);
+                break;
 
-        if (selectedSlot == QuickSlot.JumpPlatform)
-            ShowJumpPlatform();
+            case HotbarItemType.NormalGrenade:
+                if (normalGrenadeVisual != null)
+                    normalGrenadeVisual.SetActive(true);
 
-        if (IsHealthSlot(selectedSlot))
-            ShowHealthItem();
+                if (grenadeInventory != null)
+                    grenadeInventory.SelectNormalGrenade();
+                break;
 
-        if (selectedSlot == QuickSlot.ArmorItem)
-            ShowArmorItem();
+            case HotbarItemType.Molotov:
+                if (molotovVisual != null)
+                    molotovVisual.SetActive(true);
+
+                if (grenadeInventory != null)
+                    grenadeInventory.SelectMolotov();
+                break;
+
+            case HotbarItemType.JumpPlatform:
+                if (jumpPlatformVisual != null)
+                    jumpPlatformVisual.SetActive(true);
+                break;
+
+            case HotbarItemType.Health:
+                ShowHealthItem();
+                break;
+
+            case HotbarItemType.Armor:
+                ShowArmorItem();
+                break;
+
+            case HotbarItemType.Battery:
+                ShowBatteryItem();
+                break;
+        }
     }
 
     private void HideEverything()
     {
-        Weapon[] weapons = GetWeapons();
+        if (handsVisual != null)
+            handsVisual.SetActive(false);
 
-        for (int i = 0; i < weapons.Length; i++)
+        for (int i = 0; i < slots.Count; i++)
         {
-            if (weapons[i] != null)
-                weapons[i].gameObject.SetActive(false);
+            if (slots[i].weapon != null)
+                slots[i].weapon.gameObject.SetActive(false);
         }
 
         if (normalGrenadeVisual != null)
@@ -440,50 +541,43 @@ public class WeaponSwitcher : MonoBehaviour
             armorHandVisual.HideArmor();
         else if (armorVisual != null)
             armorVisual.SetActive(false);
+
+        if (batteryAVisual != null)
+            batteryAVisual.SetActive(false);
+
+        if (batteryAAVisual != null)
+            batteryAAVisual.SetActive(false);
+
+        if (batteryAAAVisual != null)
+            batteryAAAVisual.SetActive(false);
     }
 
-    private void ShowSelectedWeapon()
+    private void ShowHands()
     {
-        Weapon[] weapons = GetWeapons();
-
-        if (weapons.Length <= 0)
-            return;
-
-        selectedWeaponIndex = Mathf.Clamp(selectedWeaponIndex, 0, weapons.Length - 1);
-
-        if (weapons[selectedWeaponIndex] != null)
-            weapons[selectedWeaponIndex].gameObject.SetActive(true);
-    }
-
-    private void ShowNormalGrenade()
-    {
-        if (normalGrenadeVisual != null)
-            normalGrenadeVisual.SetActive(true);
-    }
-
-    private void ShowMolotov()
-    {
-        if (molotovVisual != null)
-            molotovVisual.SetActive(true);
-    }
-
-    private void ShowJumpPlatform()
-    {
-        if (jumpPlatformVisual != null)
-            jumpPlatformVisual.SetActive(true);
+        if (handsVisual != null)
+            handsVisual.SetActive(true);
+        else
+            Debug.LogWarning(
+                "WeaponSwitcher: assign PlayerHands to Hands Visual."
+            );
     }
 
     private void ShowHealthItem()
     {
-        if (healthInventory == null)
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
             return;
+        }
 
-        if (healthInventory.GetItemCount() <= 0)
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Health)
             return;
 
         if (healthHandVisual != null)
         {
-            healthHandVisual.ShowItem(healthInventory.GetSelectedItem());
+            healthHandVisual.ShowItem(slot.healthType);
             return;
         }
 
@@ -493,67 +587,194 @@ public class WeaponSwitcher : MonoBehaviour
 
     private void ShowArmorItem()
     {
-        if (armorInventory == null)
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
             return;
+        }
 
-        if (!armorInventory.HasArmorItem())
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Armor)
             return;
 
         if (armorHandVisual != null)
         {
-            armorHandVisual.ShowArmor(armorInventory.GetSelectedArmor());
+            DisablePhysicsOnHeldVisual(armorHandVisual.gameObject);
+            armorHandVisual.ShowArmor(slot.armorType);
             return;
         }
 
         if (armorVisual != null)
+        {
+            DisablePhysicsOnHeldVisual(armorVisual);
             armorVisual.SetActive(true);
+        }
     }
 
-    private void HandleDropWeapon()
+    private void ShowBatteryItem()
     {
-        if (!Input.GetKeyDown(dropKey))
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return;
+        }
+
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Battery)
             return;
 
-        if (selectedSlot == QuickSlot.Weapon1 || selectedSlot == QuickSlot.Weapon2)
-            DropCurrentWeapon();
+        GameObject selectedVisual = null;
+
+        switch (slot.batteryType)
+        {
+            case FlashlightBatteryType.A:
+                selectedVisual = batteryAVisual;
+                break;
+
+            case FlashlightBatteryType.AA:
+                selectedVisual = batteryAAVisual;
+                break;
+
+            case FlashlightBatteryType.AAA:
+                selectedVisual = batteryAAAVisual;
+                break;
+        }
+
+        if (selectedVisual == null)
+        {
+            // The battery still works without a hand model.
+            ShowHands();
+            return;
+        }
+
+        DisablePhysicsOnHeldVisual(selectedVisual);
+        selectedVisual.SetActive(true);
     }
 
-    private void HandleUseSelectedSlot()
+    private void DisablePhysicsOnHeldVisual(GameObject visualRoot)
     {
-        if (usingHealthItem || usingArmorItem)
+        if (visualRoot == null)
             return;
 
+        Collider[] colliders =
+            visualRoot.GetComponentsInChildren<Collider>(true);
+
+        for (int i = 0; i < colliders.Length; i++)
+            colliders[i].enabled = false;
+
+        Rigidbody[] rigidbodies =
+            visualRoot.GetComponentsInChildren<Rigidbody>(true);
+
+        for (int i = 0; i < rigidbodies.Length; i++)
+        {
+            rigidbodies[i].useGravity = false;
+            rigidbodies[i].isKinematic = true;
+            rigidbodies[i].detectCollisions = false;
+        }
+    }
+
+    // =========================================================
+    // USE SELECTED ITEM
+    // =========================================================
+
+    private void HandleUseSelectedBattery()
+    {
+        if (!Input.GetKeyDown(batteryUseKey))
+            return;
+
+        if (HandsActive ||
+            selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return;
+        }
+
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Battery)
+            return;
+
+        if (flashlightInventory == null)
+        {
+            Debug.LogWarning("PlayerFlashlightInventory is missing.");
+            return;
+        }
+
+        int usedBatterySlot = selectedHotbarIndex;
+
+        bool installed = flashlightInventory.InstallBattery(
+            slot.batteryType
+        );
+
+        if (!installed)
+            return;
+
+        ClearSlot(usedBatterySlot);
+
+        int flashlightSlot = FindSlotWithType(
+            HotbarItemType.Flashlight
+        );
+
+        if (autoSelectFlashlightAfterReload &&
+            flashlightSlot >= 0)
+        {
+            SelectHotbarIndex(flashlightSlot);
+        }
+        else
+        {
+            SelectHands();
+        }
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                "Battery used from Slot " +
+                (usedBatterySlot + 1) +
+                ". Flashlight charge: " +
+                Mathf.CeilToInt(
+                    flashlightInventory.CurrentCharge
+                ) + "%"
+            );
+        }
+    }
+
+    private void HandleUseSelectedItem()
+    {
         if (!Input.GetMouseButtonDown(0))
             return;
 
-        if (selectedSlot == QuickSlot.NormalGrenade)
-        {
-            UseNormalGrenade();
+        if (HandsActive)
             return;
-        }
 
-        if (selectedSlot == QuickSlot.Molotov)
-        {
-            UseMolotov();
-            return;
-        }
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
 
-        if (selectedSlot == QuickSlot.JumpPlatform)
-        {
-            UseJumpPlatform();
+        // Weapon.cs handles guns and melee weapons.
+        if (slot.itemType == HotbarItemType.Weapon)
             return;
-        }
 
-        if (IsHealthSlot(selectedSlot))
+        switch (slot.itemType)
         {
-            UseHealthItem();
-            return;
-        }
+            case HotbarItemType.NormalGrenade:
+                UseNormalGrenade();
+                break;
 
-        if (selectedSlot == QuickSlot.ArmorItem)
-        {
-            UseArmorItem();
-            return;
+            case HotbarItemType.Molotov:
+                UseMolotov();
+                break;
+
+            case HotbarItemType.JumpPlatform:
+                UseJumpPlatform();
+                break;
+
+            case HotbarItemType.Health:
+                UseHealthItem();
+                break;
+
+            case HotbarItemType.Armor:
+                UseArmorItem();
+                break;
         }
     }
 
@@ -562,13 +783,13 @@ public class WeaponSwitcher : MonoBehaviour
         if (grenadeInventory == null)
             return;
 
-        if (grenadeInventory.GetGrenadeCount(GrenadeType.Normal) <= 0)
-            return;
-
         grenadeInventory.SelectNormalGrenade();
         grenadeInventory.ThrowNormalGrenade();
 
-        AfterUsingItem();
+        RemoveStackableSlotIfEmpty(
+            selectedHotbarIndex,
+            HotbarItemType.NormalGrenade
+        );
     }
 
     private void UseMolotov()
@@ -576,13 +797,13 @@ public class WeaponSwitcher : MonoBehaviour
         if (grenadeInventory == null)
             return;
 
-        if (grenadeInventory.GetGrenadeCount(GrenadeType.Molotov) <= 0)
-            return;
-
         grenadeInventory.SelectMolotov();
         grenadeInventory.ThrowMolotov();
 
-        AfterUsingItem();
+        RemoveStackableSlotIfEmpty(
+            selectedHotbarIndex,
+            HotbarItemType.Molotov
+        );
     }
 
     private void UseJumpPlatform()
@@ -590,119 +811,601 @@ public class WeaponSwitcher : MonoBehaviour
         if (jumpPlatformInventory == null)
             return;
 
-        if (jumpPlatformInventory.GetPlatformCount() <= 0)
-            return;
-
         jumpPlatformInventory.PlacePlatform();
 
-        AfterUsingItem();
+        RemoveStackableSlotIfEmpty(
+            selectedHotbarIndex,
+            HotbarItemType.JumpPlatform
+        );
     }
 
     private void UseHealthItem()
     {
-        if (healthInventory == null)
+        if (healthInventory == null ||
+            selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return;
+        }
+
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Health)
             return;
 
-        if (!healthInventory.HasHealthItem())
-            return;
+        int inventoryIndex = FindHealthInventoryIndex(slot.healthType);
 
-        StartCoroutine(UseHealthItemRoutine());
+        if (inventoryIndex < 0)
+        {
+            Debug.LogWarning("Selected health item is missing from PlayerHealthInventory.");
+            ClearSlot(selectedHotbarIndex);
+            UpdateLegacySelectedSlot();
+            RefreshVisuals();
+            return;
+        }
+
+        healthInventory.selectedIndex = inventoryIndex;
+
+        StartCoroutine(UseHealthItemRoutine(selectedHotbarIndex));
     }
 
-    private IEnumerator UseHealthItemRoutine()
+    private IEnumerator UseHealthItemRoutine(int slotIndex)
     {
         usingHealthItem = true;
 
         if (healthHandVisual != null)
-            yield return StartCoroutine(healthHandVisual.DrinkAnimation());
+        {
+            yield return StartCoroutine(
+                healthHandVisual.DrinkAnimation()
+            );
+        }
 
-        healthInventory.UseSelectedHealthItem();
+        bool used = healthInventory.UseSelectedHealthItem();
 
         usingHealthItem = false;
 
-        AfterUsingItem();
+        if (used)
+        {
+            ClearSlot(slotIndex);
+            UpdateLegacySelectedSlot();
+        }
+
+        RefreshVisuals();
+    }
+
+    private int FindHealthInventoryIndex(HealthItemType healthType)
+    {
+        if (healthInventory == null ||
+            healthInventory.healthItems == null)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < healthInventory.healthItems.Count; i++)
+        {
+            if (healthInventory.healthItems[i] == healthType)
+                return i;
+        }
+
+        return -1;
     }
 
     private void UseArmorItem()
     {
-        if (usingArmorItem)
+        if (armorInventory == null ||
+            selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return;
+        }
+
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
+
+        if (slot.itemType != HotbarItemType.Armor)
             return;
 
-        if (armorInventory == null)
-            return;
+        int inventoryIndex = FindArmorInventoryIndex(slot.armorType);
 
-        if (!armorInventory.HasArmorItem())
+        if (inventoryIndex < 0)
+        {
+            Debug.LogWarning("Selected armor is missing from PlayerArmorInventory.");
+            ClearSlot(selectedHotbarIndex);
+            UpdateLegacySelectedSlot();
+            RefreshVisuals();
             return;
+        }
+
+        armorInventory.selectedIndex = inventoryIndex;
 
         if (!armorInventory.CanUseSelectedArmor())
             return;
 
-        StartCoroutine(UseArmorItemRoutine());
+        StartCoroutine(UseArmorItemRoutine(selectedHotbarIndex));
     }
 
-    private IEnumerator UseArmorItemRoutine()
+    private IEnumerator UseArmorItemRoutine(int slotIndex)
     {
         usingArmorItem = true;
 
         if (armorHandVisual != null)
-            yield return StartCoroutine(armorHandVisual.PutArmorAnimation());
+        {
+            yield return StartCoroutine(
+                armorHandVisual.PutArmorAnimation()
+            );
+        }
 
         bool used = armorInventory.UseSelectedArmor();
 
         usingArmorItem = false;
 
         if (used)
-            AfterUsingItem();
-        else
-            RefreshVisuals();
+        {
+            ClearSlot(slotIndex);
+            UpdateLegacySelectedSlot();
+        }
+
+        RefreshVisuals();
     }
 
-    private void AfterUsingItem()
+    private int FindArmorInventoryIndex(ArmorItemType armorType)
     {
-        if (IsSlotAvailable(selectedSlot))
-            RefreshVisuals();
-        else
-            SelectFirstAvailableSlot();
+        if (armorInventory == null ||
+            armorInventory.armorItems == null)
+        {
+            return -1;
+        }
+
+        for (int i = 0; i < armorInventory.armorItems.Count; i++)
+        {
+            if (armorInventory.armorItems[i] == armorType)
+                return i;
+        }
+
+        return -1;
     }
+
+    private void RemoveStackableSlotIfEmpty(
+        int slotIndex,
+        HotbarItemType expectedType
+    )
+    {
+        if (slotIndex < 0 || slotIndex >= slots.Count)
+            return;
+
+        if (slots[slotIndex].itemType != expectedType)
+            return;
+
+        if (GetStoredCount(expectedType) <= 0)
+            ClearSlot(slotIndex);
+
+        UpdateLegacySelectedSlot();
+        RefreshVisuals();
+    }
+
+    private int GetStoredCount(HotbarItemType itemType)
+    {
+        switch (itemType)
+        {
+            case HotbarItemType.NormalGrenade:
+                return grenadeInventory == null
+                    ? 0
+                    : grenadeInventory.GetGrenadeCount(
+                        GrenadeType.Normal
+                    );
+
+            case HotbarItemType.Molotov:
+                return grenadeInventory == null
+                    ? 0
+                    : grenadeInventory.GetGrenadeCount(
+                        GrenadeType.Molotov
+                    );
+
+            case HotbarItemType.JumpPlatform:
+                return jumpPlatformInventory == null
+                    ? 0
+                    : jumpPlatformInventory.GetPlatformCount();
+
+            case HotbarItemType.Health:
+                return healthInventory == null
+                    ? 0
+                    : healthInventory.GetItemCount();
+
+            case HotbarItemType.Armor:
+                return armorInventory == null
+                    ? 0
+                    : armorInventory.GetItemCount();
+
+            default:
+                return 0;
+        }
+    }
+
+    // =========================================================
+    // ADD STACKABLE ITEMS
+    // =========================================================
+
+    public bool CanStoreItem(HotbarItemType itemType)
+    {
+        if (itemType == HotbarItemType.Empty)
+            return false;
+
+        // Every weapon, health item and armor item uses one separate slot.
+        if (itemType == HotbarItemType.Weapon ||
+            itemType == HotbarItemType.Health ||
+            itemType == HotbarItemType.Armor ||
+            itemType == HotbarItemType.Flashlight ||
+            itemType == HotbarItemType.Battery)
+        {
+            return FindPreferredEmptySlot() >= 0;
+        }
+
+        // Grenades, Molotovs and platforms can stack in one slot.
+        if (FindSlotWithType(itemType) >= 0)
+            return true;
+
+        return FindPreferredEmptySlot() >= 0;
+    }
+
+    public bool RegisterStackableItem(
+        HotbarItemType itemType,
+        bool selectItem = true
+    )
+    {
+        if (itemType == HotbarItemType.Empty ||
+            itemType == HotbarItemType.Weapon ||
+            itemType == HotbarItemType.Health ||
+            itemType == HotbarItemType.Armor ||
+            itemType == HotbarItemType.Flashlight ||
+            itemType == HotbarItemType.Battery)
+        {
+            return false;
+        }
+
+        int existingIndex = FindSlotWithType(itemType);
+
+        if (existingIndex >= 0)
+        {
+            if (selectItem)
+                SelectHotbarIndex(existingIndex);
+
+            return true;
+        }
+
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+        {
+            Debug.Log("Hotbar full. Cannot add " + itemType + ".");
+            return false;
+        }
+
+        slots[emptyIndex].itemType = itemType;
+        slots[emptyIndex].weapon = null;
+
+        if (selectItem)
+            SelectHotbarIndex(emptyIndex);
+
+        return true;
+    }
+
+    public bool TryAddGrenades(
+        GrenadeType grenadeType,
+        int amount
+    )
+    {
+        if (grenadeInventory == null)
+            return false;
+
+        HotbarItemType hotbarType =
+            grenadeType == GrenadeType.Normal
+                ? HotbarItemType.NormalGrenade
+                : HotbarItemType.Molotov;
+
+        if (!CanStoreItem(hotbarType))
+        {
+            Debug.Log("Hotbar full. Cannot pick up " + grenadeType);
+            return false;
+        }
+
+        int before = grenadeInventory.GetGrenadeCount(grenadeType);
+        grenadeInventory.AddGrenade(grenadeType, amount);
+        int after = grenadeInventory.GetGrenadeCount(grenadeType);
+
+        if (after <= before)
+            return false;
+
+        RegisterStackableItem(hotbarType);
+        return true;
+    }
+
+    public bool TryAddHealthItem(HealthItemType itemType)
+    {
+        if (healthInventory == null)
+        {
+            Debug.LogWarning("PlayerHealthInventory is missing.");
+            return false;
+        }
+
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+        {
+            Debug.Log("Hotbar full. Cannot pick up health item.");
+            return false;
+        }
+
+        bool added = healthInventory.AddHealthItem(itemType);
+
+        if (!added)
+            return false;
+
+        slots[emptyIndex].itemType = HotbarItemType.Health;
+        slots[emptyIndex].weapon = null;
+        slots[emptyIndex].healthType = itemType;
+
+        SelectHotbarIndex(emptyIndex);
+        return true;
+    }
+
+    public bool TryAddJumpPlatforms(int amount)
+    {
+        if (jumpPlatformInventory == null)
+            return false;
+
+        if (!CanStoreItem(HotbarItemType.JumpPlatform))
+        {
+            Debug.Log("Hotbar full. Cannot pick up jump platform.");
+            return false;
+        }
+
+        int before = jumpPlatformInventory.GetPlatformCount();
+        jumpPlatformInventory.AddPlatforms(amount);
+        int after = jumpPlatformInventory.GetPlatformCount();
+
+        if (after <= before)
+            return false;
+
+        RegisterStackableItem(HotbarItemType.JumpPlatform);
+        return true;
+    }
+
+    // Call this AFTER your existing armor pickup successfully
+    // adds an armor item to PlayerArmorInventory.
+    public bool TryAddArmorItem(ArmorItemType armorType)
+    {
+        if (armorInventory == null)
+        {
+            Debug.LogWarning("PlayerArmorInventory is missing.");
+            return false;
+        }
+
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+        {
+            Debug.Log("Hotbar full. Cannot pick up armor.");
+            return false;
+        }
+
+        bool added = armorInventory.AddArmorItem(armorType);
+
+        if (!added)
+            return false;
+
+        slots[emptyIndex].itemType = HotbarItemType.Armor;
+        slots[emptyIndex].weapon = null;
+        slots[emptyIndex].armorType = armorType;
+
+        if (autoSelectPickedArmor)
+            SelectHotbarIndex(emptyIndex);
+        else
+            SelectHands();
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                "Armor added to Slot " +
+                (emptyIndex + 1) +
+                ": " + armorType
+            );
+        }
+
+        return true;
+    }
+
+    public bool TryAddFlashlight(float startingCharge = 0f)
+    {
+        if (flashlightInventory == null)
+        {
+            Debug.LogWarning("PlayerFlashlightInventory is missing.");
+            return false;
+        }
+
+        if (flashlightInventory.HasFlashlight)
+        {
+            Debug.Log("You already have a flashlight.");
+            return false;
+        }
+
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+        {
+            Debug.Log("Hotbar full. Cannot pick up flashlight.");
+            return false;
+        }
+
+        bool added = flashlightInventory.AddFlashlight(startingCharge);
+
+        if (!added)
+            return false;
+
+        slots[emptyIndex].itemType = HotbarItemType.Flashlight;
+        slots[emptyIndex].weapon = null;
+
+        SelectHotbarIndex(emptyIndex);
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                "Flashlight added to Slot " +
+                (emptyIndex + 1)
+            );
+        }
+
+        return true;
+    }
+
+    public bool TryAddBattery(FlashlightBatteryType batteryType)
+    {
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+        {
+            Debug.Log(
+                "Hotbar full. Cannot pick up " +
+                batteryType + " battery."
+            );
+            return false;
+        }
+
+        bool batteryWasPlacedInSelectedEmptySlot =
+            selectedHotbarIndex == emptyIndex;
+
+        slots[emptyIndex].itemType = HotbarItemType.Battery;
+        slots[emptyIndex].weapon = null;
+        slots[emptyIndex].batteryType = batteryType;
+
+        if (autoSelectPickedBattery)
+        {
+            SelectHotbarIndex(emptyIndex);
+        }
+        else if (batteryWasPlacedInSelectedEmptySlot)
+        {
+            SelectHands();
+        }
+        else
+        {
+            UpdateLegacySelectedSlot();
+            RefreshVisuals();
+        }
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                batteryType +
+                " battery added to Slot " +
+                (emptyIndex + 1)
+            );
+        }
+
+        return true;
+    }
+
+    // Compatibility with older pickup scripts that first add to
+    // PlayerArmorInventory and then register the hotbar slot.
+    public bool RegisterArmorAfterPickup()
+    {
+        if (armorInventory == null ||
+            armorInventory.armorItems == null ||
+            armorInventory.armorItems.Count <= 0)
+        {
+            return false;
+        }
+
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
+            return false;
+
+        int registeredArmorSlots = 0;
+
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].itemType == HotbarItemType.Armor)
+                registeredArmorSlots++;
+        }
+
+        int inventoryIndex = Mathf.Clamp(
+            registeredArmorSlots,
+            0,
+            armorInventory.armorItems.Count - 1
+        );
+
+        slots[emptyIndex].itemType = HotbarItemType.Armor;
+        slots[emptyIndex].weapon = null;
+        slots[emptyIndex].armorType =
+            armorInventory.armorItems[inventoryIndex];
+
+        return true;
+    }
+
+    // =========================================================
+    // ADD / DROP WEAPONS
+    // =========================================================
 
     public bool AddWeapon(GameObject weaponPrefab)
     {
         if (weaponPrefab == null)
             return false;
 
-        if (GetWeaponCount() >= maxWeapons)
+        int emptyIndex = FindPreferredEmptySlot();
+
+        if (emptyIndex < 0)
         {
-            Debug.LogWarning("Inventory full. You can carry only 2 weapons.");
+            Debug.LogWarning("Hotbar full. Cannot pick up weapon.");
             return false;
         }
 
         GameObject newWeapon = Instantiate(weaponPrefab, transform);
 
-        newWeapon.transform.localPosition = Vector3.zero;
-        newWeapon.transform.localRotation = Quaternion.identity;
-        newWeapon.transform.localScale = weaponPrefab.transform.localScale;
+        newWeapon.transform.localPosition =
+            weaponPrefab.transform.localPosition;
 
-        PrepareWeapon(newWeapon);
+        newWeapon.transform.localRotation =
+            weaponPrefab.transform.localRotation;
 
-        if (GetWeaponCount() <= 1)
-            SelectSlot(QuickSlot.Weapon1);
-        else
-            SelectSlot(QuickSlot.Weapon2);
+        newWeapon.transform.localScale =
+            weaponPrefab.transform.localScale;
 
+        Weapon weapon = newWeapon.GetComponent<Weapon>();
+
+        if (weapon == null)
+        {
+            Debug.LogWarning(
+                newWeapon.name +
+                " does not have Weapon.cs on its root."
+            );
+
+            Destroy(newWeapon);
+            return false;
+        }
+
+        PrepareWeapon(weapon);
+
+        slots[emptyIndex].itemType = HotbarItemType.Weapon;
+        slots[emptyIndex].weapon = weapon;
+
+        newWeapon.SetActive(false);
+
+        SelectHotbarIndex(emptyIndex);
         return true;
     }
 
-    private void PrepareWeapon(GameObject weaponObject)
+    private void PrepareWeapon(Weapon weapon)
     {
-        Weapon weapon = weaponObject.GetComponent<Weapon>();
-
-        if (weapon == null)
-            return;
-
         weapon.fpsCamera = fpsCamera;
         weapon.carCamera = carCamera;
         weapon.scopeOverlay = scopeOverlay;
         weapon.normalCrosshairUI = normalCrosshairUI;
+    }
+
+    private void HandleDropWeapon()
+    {
+        if (!Input.GetKeyDown(dropKey))
+            return;
+
+        DropCurrentWeapon();
     }
 
     public void DropCurrentWeapon()
@@ -713,14 +1416,19 @@ public class WeaponSwitcher : MonoBehaviour
             return;
 
         if (activeWeapon.pickupPrefab == null)
+        {
+            Debug.LogWarning(
+                activeWeapon.weaponName +
+                " has no Pickup Prefab."
+            );
+
             return;
+        }
 
-        Vector3 spawnPosition;
-
-        if (dropPoint != null)
-            spawnPosition = dropPoint.position;
-        else
-            spawnPosition = transform.position + transform.forward * 2f;
+        Vector3 spawnPosition =
+            dropPoint != null
+                ? dropPoint.position
+                : transform.position + transform.forward * 2f;
 
         GameObject droppedPickup = Instantiate(
             activeWeapon.pickupPrefab,
@@ -730,45 +1438,249 @@ public class WeaponSwitcher : MonoBehaviour
 
         droppedPickup.SetActive(true);
 
+        int oldSlotIndex = selectedHotbarIndex;
+
+        ClearSlot(oldSlotIndex);
         Destroy(activeWeapon.gameObject);
 
-        selectedWeaponIndex = 0;
+        UpdateLegacySelectedSlot();
+        RefreshVisuals();
+    }
 
-        Invoke(nameof(SelectFirstAvailableSlot), 0.05f);
+    // =========================================================
+    // SLOT HELPERS
+    // =========================================================
+
+    private int FindPreferredEmptySlot()
+    {
+        // Select an empty slot first, then pick an item to place it there.
+        if (selectedHotbarIndex >= 0 &&
+            selectedHotbarIndex < slots.Count &&
+            slots[selectedHotbarIndex].itemType == HotbarItemType.Empty)
+        {
+            return selectedHotbarIndex;
+        }
+
+        return FindFirstEmptySlot();
+    }
+
+    private int FindFirstEmptySlot()
+    {
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].itemType == HotbarItemType.Empty)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private int FindSlotWithType(HotbarItemType itemType)
+    {
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i].itemType == itemType)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void ClearSlot(int index)
+    {
+        if (index < 0 || index >= slots.Count)
+            return;
+
+        slots[index].itemType = HotbarItemType.Empty;
+        slots[index].weapon = null;
+        slots[index].healthType = HealthItemType.Small20;
+        slots[index].armorType = ArmorItemType.Strong100;
+        slots[index].batteryType = FlashlightBatteryType.A;
+    }
+
+    // =========================================================
+    // PUBLIC DATA FOR HUD AND OTHER SCRIPTS
+    // =========================================================
+
+    public HotbarItemType GetSlotItemType(int index)
+    {
+        if (index < 0 || index >= slots.Count)
+            return HotbarItemType.Empty;
+
+        return slots[index].itemType;
+    }
+
+    public bool IsSlotFilled(int index)
+    {
+        return GetSlotItemType(index) != HotbarItemType.Empty;
+    }
+
+    public bool IsSlotSelected(int index)
+    {
+        return selectedHotbarIndex == index;
+    }
+
+    public string GetSlotTitle(int index)
+    {
+        if (index < 0 || index >= slots.Count)
+            return "EMPTY";
+
+        RuntimeHotbarSlot slot = slots[index];
+
+        switch (slot.itemType)
+        {
+            case HotbarItemType.Weapon:
+                if (slot.weapon == null ||
+                    string.IsNullOrEmpty(slot.weapon.weaponName))
+                {
+                    return "WEAPON";
+                }
+
+                return slot.weapon.weaponName.ToUpper();
+
+            case HotbarItemType.NormalGrenade:
+                return "GRENADE";
+
+            case HotbarItemType.Molotov:
+                return "MOLOTOV";
+
+            case HotbarItemType.JumpPlatform:
+                return "PLATFORM";
+
+            case HotbarItemType.Health:
+                return slot.healthType.ToString().ToUpper();
+
+            case HotbarItemType.Armor:
+                return slot.armorType.ToString().ToUpper();
+
+            case HotbarItemType.Flashlight:
+                return "FLASHLIGHT";
+
+            case HotbarItemType.Battery:
+                return slot.batteryType.ToString().ToUpper() +
+                       " BATTERY";
+
+            default:
+                return "EMPTY";
+        }
+    }
+
+    public string GetSlotCountText(int index)
+    {
+        if (index < 0 || index >= slots.Count)
+            return "";
+
+        HotbarItemType itemType = slots[index].itemType;
+
+        if (itemType == HotbarItemType.Weapon ||
+            itemType == HotbarItemType.Empty)
+        {
+            return "";
+        }
+
+        if (itemType == HotbarItemType.Flashlight)
+        {
+            if (flashlightInventory == null)
+                return "0%";
+
+            return Mathf.CeilToInt(
+                flashlightInventory.CurrentCharge
+            ) + "%";
+        }
+
+        if (itemType == HotbarItemType.Health ||
+            itemType == HotbarItemType.Armor ||
+            itemType == HotbarItemType.Battery)
+        {
+            return "x1";
+        }
+
+        return "x" + GetStoredCount(itemType);
+    }
+
+    public bool IsFlashlightSelected()
+    {
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return false;
+        }
+
+        return slots[selectedHotbarIndex].itemType ==
+               HotbarItemType.Flashlight;
+    }
+
+    public bool IsBatterySelected()
+    {
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return false;
+        }
+
+        return slots[selectedHotbarIndex].itemType ==
+               HotbarItemType.Battery;
+    }
+
+    public FlashlightBatteryType GetSlotBatteryType(int index)
+    {
+        if (index < 0 || index >= slots.Count)
+            return FlashlightBatteryType.A;
+
+        return slots[index].batteryType;
+    }
+
+    public string GetSelectedItemTitle()
+    {
+        if (HandsActive)
+            return "HANDS";
+
+        return GetSlotTitle(selectedHotbarIndex);
     }
 
     public Weapon GetActiveWeapon()
     {
-        if (selectedSlot != QuickSlot.Weapon1 && selectedSlot != QuickSlot.Weapon2)
+        if (HandsActive)
             return null;
 
-        Weapon[] weapons = GetWeapons();
+        RuntimeHotbarSlot slot = slots[selectedHotbarIndex];
 
-        if (weapons.Length <= 0)
+        if (slot.itemType != HotbarItemType.Weapon)
             return null;
 
-        selectedWeaponIndex = Mathf.Clamp(selectedWeaponIndex, 0, weapons.Length - 1);
-
-        return weapons[selectedWeaponIndex];
+        return slot.weapon;
     }
 
-    private int GetWeaponCount()
+    // Returns the Nth weapon, not the Nth hotbar slot.
+    // Kept for compatibility with older HUD/ammo scripts.
+    public Weapon GetInventoryWeapon(int weaponIndex)
     {
-        return GetWeapons().Length;
+        List<Weapon> weapons = GetWeaponsInHotbarOrder();
+
+        if (weaponIndex < 0 || weaponIndex >= weapons.Count)
+            return null;
+
+        return weapons[weaponIndex];
     }
 
-    private Weapon[] GetWeapons()
+    public int GetWeaponCount()
+    {
+        return GetWeaponsInHotbarOrder().Count;
+    }
+
+    private List<Weapon> GetWeaponsInHotbarOrder()
     {
         List<Weapon> weapons = new List<Weapon>();
 
-        for (int i = 0; i < transform.childCount; i++)
+        for (int i = 0; i < slots.Count; i++)
         {
-            Weapon weapon = transform.GetChild(i).GetComponent<Weapon>();
-
-            if (weapon != null)
-                weapons.Add(weapon);
+            if (slots[i].itemType == HotbarItemType.Weapon &&
+                slots[i].weapon != null)
+            {
+                weapons.Add(slots[i].weapon);
+            }
         }
 
-        return weapons.ToArray();
+        return weapons;
     }
 }

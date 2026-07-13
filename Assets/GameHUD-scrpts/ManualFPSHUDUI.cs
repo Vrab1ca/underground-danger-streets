@@ -66,7 +66,7 @@ public class ManualFPSHUDUI : MonoBehaviour
     [Header("Interaction UI")]
     public TMP_Text interactionText;
 
-    [Header("Hotbar UI")]
+    [Header("Dynamic Hotbar UI - Maximum 8 Slots")]
     public HotbarSlotUI slot1;
     public HotbarSlotUI slot2;
     public HotbarSlotUI slot3;
@@ -74,6 +74,7 @@ public class ManualFPSHUDUI : MonoBehaviour
     public HotbarSlotUI slot5;
     public HotbarSlotUI slot6;
     public HotbarSlotUI slot7;
+    public HotbarSlotUI slot8;
 
     [Header("Stamina Values")]
     public bool showStamina = true;
@@ -92,17 +93,30 @@ public class ManualFPSHUDUI : MonoBehaviour
     public int maxBombs = 0;
 
     [Header("Colors")]
-    public Color normalSlotColor = new Color(0.08f, 0.10f, 0.14f, 0.90f);
-    public Color selectedSlotColor = new Color(1f, 0.72f, 0.18f, 1f);
-    public Color emptySlotColor = new Color(0.03f, 0.03f, 0.04f, 0.65f);
+    public Color normalSlotColor =
+        new Color(0.08f, 0.10f, 0.14f, 0.90f);
+
+    public Color selectedSlotColor =
+        new Color(1f, 0.72f, 0.18f, 1f);
+
+    public Color emptySlotColor =
+        new Color(0.03f, 0.03f, 0.04f, 0.65f);
 
     public Color normalTextColor = Color.white;
     public Color selectedTextColor = Color.black;
-    public Color emptyTextColor = new Color(0.65f, 0.65f, 0.65f, 1f);
+
+    public Color emptyTextColor =
+        new Color(0.65f, 0.65f, 0.65f, 1f);
 
     private void Awake()
     {
         Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     private void Start()
@@ -131,26 +145,51 @@ public class ManualFPSHUDUI : MonoBehaviour
     private void AutoFindReferences()
     {
         if (playerHealth == null)
-            playerHealth = FindFirstObjectByType<PlayerHealth>();
+        {
+            playerHealth =
+                FindFirstObjectByType<PlayerHealth>();
+        }
 
         if (playerArmor == null)
-            playerArmor = FindFirstObjectByType<PlayerArmor>();
+        {
+            playerArmor =
+                FindFirstObjectByType<PlayerArmor>();
+        }
 
         if (weaponSwitcher == null)
-            weaponSwitcher = FindFirstObjectByType<WeaponSwitcher>();
+        {
+            weaponSwitcher =
+                FindFirstObjectByType<WeaponSwitcher>();
+        }
 
         if (grenadeInventory == null)
-            grenadeInventory = FindFirstObjectByType<PlayerGrenadeInventory>();
+        {
+            grenadeInventory =
+                FindFirstObjectByType<PlayerGrenadeInventory>();
+        }
 
         if (jumpPlatformInventory == null)
-            jumpPlatformInventory = FindFirstObjectByType<JumpPlatformInventory>();
+        {
+            jumpPlatformInventory =
+                FindFirstObjectByType<JumpPlatformInventory>();
+        }
 
         if (healthInventory == null)
-            healthInventory = FindFirstObjectByType<PlayerHealthInventory>();
+        {
+            healthInventory =
+                FindFirstObjectByType<PlayerHealthInventory>();
+        }
 
         if (armorInventory == null)
-            armorInventory = FindFirstObjectByType<PlayerArmorInventory>();
+        {
+            armorInventory =
+                FindFirstObjectByType<PlayerArmorInventory>();
+        }
     }
+
+    // =========================================================
+    // HEALTH
+    // =========================================================
 
     private void UpdateHealthUI()
     {
@@ -159,18 +198,29 @@ public class ManualFPSHUDUI : MonoBehaviour
 
         if (healthSlider != null)
         {
-            healthSlider.maxValue = playerHealth.maxHealth;
-            healthSlider.value = playerHealth.currentHealth;
+            healthSlider.maxValue =
+                playerHealth.maxHealth;
+
+            healthSlider.value =
+                playerHealth.currentHealth;
         }
 
         if (healthText != null)
         {
             healthText.text =
-                Mathf.CeilToInt(playerHealth.currentHealth) +
+                Mathf.CeilToInt(
+                    playerHealth.currentHealth
+                ) +
                 " / " +
-                Mathf.CeilToInt(playerHealth.maxHealth);
+                Mathf.CeilToInt(
+                    playerHealth.maxHealth
+                );
         }
     }
+
+    // =========================================================
+    // ARMOR
+    // =========================================================
 
     private void UpdateArmorUI()
     {
@@ -181,8 +231,11 @@ public class ManualFPSHUDUI : MonoBehaviour
         {
             if (playerArmor.hasArmor)
             {
-                armorSlider.maxValue = playerArmor.maxArmor;
-                armorSlider.value = playerArmor.currentArmor;
+                armorSlider.maxValue =
+                    playerArmor.maxArmor;
+
+                armorSlider.value =
+                    playerArmor.currentArmor;
             }
             else
             {
@@ -196,9 +249,13 @@ public class ManualFPSHUDUI : MonoBehaviour
             if (playerArmor.hasArmor)
             {
                 armorText.text =
-                    Mathf.CeilToInt(playerArmor.currentArmor) +
+                    Mathf.CeilToInt(
+                        playerArmor.currentArmor
+                    ) +
                     " / " +
-                    Mathf.CeilToInt(playerArmor.maxArmor);
+                    Mathf.CeilToInt(
+                        playerArmor.maxArmor
+                    );
             }
             else
             {
@@ -209,24 +266,39 @@ public class ManualFPSHUDUI : MonoBehaviour
         if (armorTypeText != null)
         {
             if (playerArmor.hasArmor)
-                armorTypeText.text = "TYPE: " + playerArmor.equippedArmorType;
+            {
+                armorTypeText.text =
+                    "TYPE: " +
+                    playerArmor.equippedArmorType;
+            }
             else
+            {
                 armorTypeText.text = "TYPE: None";
+            }
         }
     }
+
+    // =========================================================
+    // STAMINA
+    // =========================================================
 
     private void UpdateStaminaUI()
     {
         if (staminaPanel != null)
+        {
             staminaPanel.SetActive(showStamina);
+        }
 
         if (!showStamina)
             return;
 
         if (staminaSlider != null)
         {
-            staminaSlider.maxValue = maxStamina;
-            staminaSlider.value = currentStamina;
+            staminaSlider.maxValue =
+                maxStamina;
+
+            staminaSlider.value =
+                currentStamina;
         }
 
         if (staminaText != null)
@@ -238,51 +310,87 @@ public class ManualFPSHUDUI : MonoBehaviour
         }
     }
 
+    // =========================================================
+    // SELECTED ITEM / WEAPON
+    // =========================================================
+
     private void UpdateWeaponUI()
     {
         if (weaponSwitcher == null)
             return;
 
-        Weapon activeWeapon = weaponSwitcher.GetActiveWeapon();
+        Weapon activeWeapon =
+            weaponSwitcher.GetActiveWeapon();
 
-        if (activeWeapon == null)
+        if (activeWeapon != null)
         {
             if (weaponNameText != null)
-                weaponNameText.text = weaponSwitcher.selectedSlot.ToString();
+            {
+                weaponNameText.text =
+                    activeWeapon.weaponName.ToUpper();
+            }
 
             if (ammoText != null)
-                ammoText.text = "";
+            {
+                if (activeWeapon.weaponMode ==
+                    Weapon.WeaponMode.Melee)
+                {
+                    // Knife, bat and other melee weapons
+                    // do not show ammunition.
+                    ammoText.text = "";
+                }
+                else
+                {
+                    ammoText.text =
+                        activeWeapon.AmmoInMagazine +
+                        " / " +
+                        activeWeapon.ReserveAmmo;
+                }
+            }
 
             return;
         }
 
+        // Shows HANDS, HEALTH, GRENADE, ARMOR, etc.
         if (weaponNameText != null)
-            weaponNameText.text = activeWeapon.weaponName;
+        {
+            weaponNameText.text =
+                weaponSwitcher.GetSelectedItemTitle();
+        }
 
         if (ammoText != null)
-        {
-            ammoText.text =
-                activeWeapon.AmmoInMagazine +
-                " / " +
-                activeWeapon.ReserveAmmo;
-        }
+            ammoText.text = "";
     }
+
+    // =========================================================
+    // VEHICLE
+    // =========================================================
 
     private void UpdateVehicleUI()
     {
         if (vehiclePanel != null)
-            vehiclePanel.SetActive(showVehiclePanel);
+        {
+            vehiclePanel.SetActive(
+                showVehiclePanel
+            );
+        }
 
         if (!showVehiclePanel)
             return;
 
         if (vehicleTitleText != null)
-            vehicleTitleText.text = vehicleName;
+        {
+            vehicleTitleText.text =
+                vehicleName;
+        }
 
         if (vehicleFuelSlider != null)
         {
-            vehicleFuelSlider.maxValue = maxFuel;
-            vehicleFuelSlider.value = currentFuel;
+            vehicleFuelSlider.maxValue =
+                maxFuel;
+
+            vehicleFuelSlider.value =
+                currentFuel;
         }
 
         if (vehicleFuelText != null)
@@ -296,9 +404,11 @@ public class ManualFPSHUDUI : MonoBehaviour
 
         if (vehicleBombsText != null)
         {
-            if (currentVehicleMode == VehicleMode.Helicopter)
+            if (currentVehicleMode ==
+                VehicleMode.Helicopter)
             {
-                vehicleBombsText.gameObject.SetActive(true);
+                vehicleBombsText.gameObject
+                    .SetActive(true);
 
                 vehicleBombsText.text =
                     "BOMBS: " +
@@ -308,75 +418,71 @@ public class ManualFPSHUDUI : MonoBehaviour
             }
             else
             {
-                vehicleBombsText.gameObject.SetActive(false);
+                vehicleBombsText.gameObject
+                    .SetActive(false);
             }
         }
     }
 
+    // =========================================================
+    // DYNAMIC HOTBAR
+    // =========================================================
+
     private void UpdateHotbarUI()
     {
-        SetSlot(
+        HotbarSlotUI[] uiSlots =
+        {
             slot1,
-            "[1]",
-            GetWeaponName(0, "WEAPON 1"),
-            "",
-            HasWeapon(0),
-            IsSelected(WeaponSwitcher.QuickSlot.Weapon1)
-        );
-
-        SetSlot(
             slot2,
-            "[2]",
-            GetWeaponName(1, "WEAPON 2"),
-            "",
-            HasWeapon(1),
-            IsSelected(WeaponSwitcher.QuickSlot.Weapon2)
-        );
-
-        SetSlot(
             slot3,
-            "[3]",
-            "GRENADE",
-            "x" + GetNormalGrenadeCount(),
-            GetNormalGrenadeCount() > 0,
-            IsSelected(WeaponSwitcher.QuickSlot.NormalGrenade)
-        );
-
-        SetSlot(
             slot4,
-            "[4]",
-            "MOLOTOV",
-            "x" + GetMolotovCount(),
-            GetMolotovCount() > 0,
-            IsSelected(WeaponSwitcher.QuickSlot.Molotov)
-        );
-
-        SetSlot(
             slot5,
-            "[5]",
-            "PLATFORM",
-            "x" + GetPlatformCount(),
-            GetPlatformCount() > 0,
-            IsSelected(WeaponSwitcher.QuickSlot.JumpPlatform)
-        );
-
-        SetSlot(
             slot6,
-            "[6]",
-            "HEALTH",
-            "x" + GetHealthCount(),
-            GetHealthCount() > 0,
-            IsHealthSelected()
-        );
-
-        SetSlot(
             slot7,
-            "[7]",
-            "ARMOR",
-            "x" + GetArmorCount(),
-            GetArmorCount() > 0,
-            IsSelected(WeaponSwitcher.QuickSlot.ArmorItem)
-        );
+            slot8
+        };
+
+        int visibleCount = 0;
+
+        if (weaponSwitcher != null)
+        {
+            visibleCount =
+                weaponSwitcher.SlotCount;
+        }
+
+        for (int i = 0;
+             i < uiSlots.Length;
+             i++)
+        {
+            HotbarSlotUI uiSlot =
+                uiSlots[i];
+
+            if (uiSlot == null)
+                continue;
+
+            bool shouldShow =
+                weaponSwitcher != null &&
+                i < visibleCount;
+
+            if (uiSlot.slotPanel != null)
+            {
+                uiSlot.slotPanel.SetActive(
+                    shouldShow
+                );
+            }
+
+            if (!shouldShow)
+                continue;
+
+            SetSlot(
+                uiSlot,
+                "[" + (i + 1) + "]",
+                weaponSwitcher.GetSlotTitle(i),
+                weaponSwitcher.GetSlotCountText(i),
+                weaponSwitcher.IsSlotFilled(i),
+                weaponSwitcher.IsSlotSelected(i)
+            );
+        }
     }
 
     private void SetSlot(
@@ -391,141 +497,90 @@ public class ManualFPSHUDUI : MonoBehaviour
         if (slot == null)
             return;
 
-        Color bgColor = normalSlotColor;
-        Color finalTextColor = normalTextColor;
+        Color bgColor =
+            normalSlotColor;
+
+        Color finalTextColor =
+            normalTextColor;
 
         if (!hasItem)
         {
-            bgColor = emptySlotColor;
-            finalTextColor = emptyTextColor;
+            bgColor =
+                emptySlotColor;
+
+            finalTextColor =
+                emptyTextColor;
         }
 
         if (selected)
         {
-            bgColor = selectedSlotColor;
-            finalTextColor = selectedTextColor;
+            bgColor =
+                selectedSlotColor;
+
+            finalTextColor =
+                selectedTextColor;
         }
 
         if (slot.backgroundImage != null)
-            slot.backgroundImage.color = bgColor;
+        {
+            slot.backgroundImage.color =
+                bgColor;
+        }
 
         if (slot.keyText != null)
         {
             slot.keyText.text = key;
-            slot.keyText.color = finalTextColor;
+
+            slot.keyText.color =
+                finalTextColor;
         }
 
         if (slot.titleText != null)
         {
-            slot.titleText.text = title;
-            slot.titleText.color = finalTextColor;
+            slot.titleText.text =
+                title;
+
+            slot.titleText.color =
+                finalTextColor;
         }
 
         if (slot.countText != null)
         {
             if (hasItem)
-                slot.countText.text = count;
+            {
+                slot.countText.text =
+                    count;
+            }
             else
+            {
                 slot.countText.text = "";
+            }
 
-            slot.countText.color = finalTextColor;
+            slot.countText.color =
+                finalTextColor;
         }
     }
 
-    private bool IsSelected(WeaponSwitcher.QuickSlot slot)
-    {
-        if (weaponSwitcher == null)
-            return false;
+    // =========================================================
+    // PUBLIC STAMINA METHODS
+    // =========================================================
 
-        return weaponSwitcher.selectedSlot == slot;
-    }
-
-    private bool IsHealthSelected()
-    {
-        if (weaponSwitcher == null)
-            return false;
-
-        return weaponSwitcher.selectedSlot == WeaponSwitcher.QuickSlot.HealthItem1 ||
-               weaponSwitcher.selectedSlot == WeaponSwitcher.QuickSlot.HealthItem2 ||
-               weaponSwitcher.selectedSlot == WeaponSwitcher.QuickSlot.HealthItem3 ||
-               weaponSwitcher.selectedSlot == WeaponSwitcher.QuickSlot.HealthItem4;
-    }
-
-    private bool HasWeapon(int index)
-    {
-        if (weaponSwitcher == null)
-            return false;
-
-        Weapon[] weapons = weaponSwitcher.GetComponentsInChildren<Weapon>(true);
-
-        return weapons.Length > index;
-    }
-
-    private string GetWeaponName(int index, string defaultName)
-    {
-        if (weaponSwitcher == null)
-            return defaultName;
-
-        Weapon[] weapons = weaponSwitcher.GetComponentsInChildren<Weapon>(true);
-
-        if (weapons.Length <= index)
-            return defaultName;
-
-        if (weapons[index] == null)
-            return defaultName;
-
-        if (string.IsNullOrEmpty(weapons[index].weaponName))
-            return defaultName;
-
-        return weapons[index].weaponName.ToUpper();
-    }
-
-    private int GetNormalGrenadeCount()
-    {
-        if (grenadeInventory == null)
-            return 0;
-
-        return grenadeInventory.GetGrenadeCount(GrenadeType.Normal);
-    }
-
-    private int GetMolotovCount()
-    {
-        if (grenadeInventory == null)
-            return 0;
-
-        return grenadeInventory.GetGrenadeCount(GrenadeType.Molotov);
-    }
-
-    private int GetPlatformCount()
-    {
-        if (jumpPlatformInventory == null)
-            return 0;
-
-        return jumpPlatformInventory.GetPlatformCount();
-    }
-
-    private int GetHealthCount()
-    {
-        if (healthInventory == null)
-            return 0;
-
-        return healthInventory.GetItemCount();
-    }
-
-    private int GetArmorCount()
-    {
-        if (armorInventory == null)
-            return 0;
-
-        return armorInventory.GetItemCount();
-    }
-
-    public void SetStamina(float current, float max)
+    public void SetStamina(
+        float current,
+        float max
+    )
     {
         showStamina = true;
 
-        maxStamina = Mathf.Max(1f, max);
-        currentStamina = Mathf.Clamp(current, 0f, maxStamina);
+        maxStamina =
+            Mathf.Max(1f, max);
+
+        currentStamina =
+            Mathf.Clamp(
+                current,
+                0f,
+                maxStamina
+            );
     }
 
     public void HideStamina()
@@ -533,70 +588,132 @@ public class ManualFPSHUDUI : MonoBehaviour
         showStamina = false;
     }
 
-    public void ShowCarFuel(float current, float max)
+    // =========================================================
+    // PUBLIC VEHICLE METHODS
+    // =========================================================
+
+    public void ShowCarFuel(
+        float current,
+        float max
+    )
     {
-        currentVehicleMode = VehicleMode.Car;
+        currentVehicleMode =
+            VehicleMode.Car;
+
         showVehiclePanel = true;
 
         vehicleName = "CAR";
 
-        maxFuel = Mathf.Max(1f, max);
-        currentFuel = Mathf.Clamp(current, 0f, maxFuel);
+        maxFuel =
+            Mathf.Max(1f, max);
+
+        currentFuel =
+            Mathf.Clamp(
+                current,
+                0f,
+                maxFuel
+            );
 
         currentBombs = 0;
         maxBombs = 0;
     }
 
-    public void ShowHelicopterHUD(float current, float max, int bombs, int maxBombsValue)
+    public void ShowHelicopterHUD(
+        float current,
+        float max,
+        int bombs,
+        int maxBombsValue
+    )
     {
-        currentVehicleMode = VehicleMode.Helicopter;
+        currentVehicleMode =
+            VehicleMode.Helicopter;
+
         showVehiclePanel = true;
 
-        vehicleName = "HELICOPTER";
+        vehicleName =
+            "HELICOPTER";
 
-        maxFuel = Mathf.Max(1f, max);
-        currentFuel = Mathf.Clamp(current, 0f, maxFuel);
+        maxFuel =
+            Mathf.Max(1f, max);
 
-        currentBombs = Mathf.Max(0, bombs);
-        maxBombs = Mathf.Max(0, maxBombsValue);
+        currentFuel =
+            Mathf.Clamp(
+                current,
+                0f,
+                maxFuel
+            );
+
+        currentBombs =
+            Mathf.Max(0, bombs);
+
+        maxBombs =
+            Mathf.Max(
+                0,
+                maxBombsValue
+            );
     }
 
     public void HideVehicleHUD()
     {
-        currentVehicleMode = VehicleMode.None;
+        currentVehicleMode =
+            VehicleMode.None;
+
         showVehiclePanel = false;
     }
 
     public void HideCarHUD()
     {
-        if (currentVehicleMode != VehicleMode.Car)
+        if (currentVehicleMode !=
+            VehicleMode.Car)
+        {
             return;
+        }
 
-        currentVehicleMode = VehicleMode.None;
+        currentVehicleMode =
+            VehicleMode.None;
+
         showVehiclePanel = false;
     }
 
     public void HideHelicopterHUD()
     {
-        if (currentVehicleMode != VehicleMode.Helicopter)
+        if (currentVehicleMode !=
+            VehicleMode.Helicopter)
+        {
             return;
+        }
 
-        currentVehicleMode = VehicleMode.None;
+        currentVehicleMode =
+            VehicleMode.None;
+
         showVehiclePanel = false;
     }
 
-    public void ShowInteraction(string message)
+    // =========================================================
+    // INTERACTION MESSAGE
+    // =========================================================
+
+    public void ShowInteraction(
+        string message
+    )
     {
         if (interactionPanel != null)
+        {
             interactionPanel.SetActive(true);
+        }
 
         if (interactionText != null)
-            interactionText.text = message;
+        {
+            interactionText.text =
+                message;
+        }
     }
 
     public void HideInteraction()
     {
         if (interactionPanel != null)
+        {
             interactionPanel.SetActive(false);
+        }
     }
 }

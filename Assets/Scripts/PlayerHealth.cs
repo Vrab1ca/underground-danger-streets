@@ -17,46 +17,89 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     [Header("Armor")]
     public PlayerArmor playerArmor;
 
+    [Header("Debug")]
+    public bool debugMessages = true;
+
     private bool isDead;
 
     private void Awake()
     {
         currentHealth = maxHealth;
         isDead = false;
-
         Time.timeScale = 1f;
 
         if (deathPanel != null)
             deathPanel.SetActive(false);
 
+        FindPlayerArmor();
+    }
+
+    private void Start()
+    {
+        FindPlayerArmor();
+    }
+
+    private void FindPlayerArmor()
+    {
+        if (playerArmor != null)
+            return;
+
+        playerArmor = GetComponent<PlayerArmor>();
+
         if (playerArmor == null)
-            playerArmor = GetComponent<PlayerArmor>();
+            playerArmor = GetComponentInParent<PlayerArmor>();
+
+        if (playerArmor == null)
+            playerArmor = GetComponentInChildren<PlayerArmor>(true);
+
+        if (playerArmor == null)
+            playerArmor = FindFirstObjectByType<PlayerArmor>();
+
+        if (playerArmor == null)
+        {
+            Debug.LogWarning(
+                "PlayerHealth cannot find PlayerArmor. " +
+                "Assign the PlayerArmor component in the Inspector."
+            );
+        }
     }
 
     public void TakeDamage(float amount)
     {
-        if (isDead)
+        if (isDead || amount <= 0f)
             return;
 
-        // Armor protects first.
-        if (playerArmor != null)
+        FindPlayerArmor();
+
+        // Armor always receives damage before player HP.
+        if (playerArmor != null && playerArmor.IsArmorActive)
         {
             amount = playerArmor.ProtectFromDamage(amount);
 
+            // Armor blocked the complete current hit.
             if (amount <= 0f)
             {
-                Debug.Log("Armor blocked the damage. Player health: " + currentHealth);
+                if (debugMessages)
+                {
+                    Debug.Log(
+                        "Player HP unchanged: " +
+                        currentHealth + " / " + maxHealth
+                    );
+                }
+
                 return;
             }
         }
 
-        // If armor did not block everything, player takes damage.
-        currentHealth -= amount;
+        currentHealth = Mathf.Max(0f, currentHealth - amount);
 
-        if (currentHealth < 0f)
-            currentHealth = 0f;
-
-        Debug.Log("Player health: " + currentHealth);
+        if (debugMessages)
+        {
+            Debug.Log(
+                "PLAYER HP DAMAGE: -" + amount +
+                " | HP: " + currentHealth + " / " + maxHealth
+            );
+        }
 
         if (currentHealth <= 0f)
             Die();
@@ -64,23 +107,43 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
     public void Heal(float amount)
     {
-        if (isDead)
+        if (isDead || amount <= 0f)
             return;
 
-        currentHealth += amount;
+        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
 
-        if (currentHealth > maxHealth)
-            currentHealth = maxHealth;
-
-        Debug.Log("Player healed. Current health: " + currentHealth);
+        if (debugMessages)
+        {
+            Debug.Log(
+                "Player healed: +" + amount +
+                " | HP: " + currentHealth + " / " + maxHealth
+            );
+        }
     }
 
-    public void HealOverTime(float totalHealAmount, float healPerTick, float secondsBetweenTicks)
+    public void HealOverTime(
+        float totalHealAmount,
+        float healPerTick,
+        float secondsBetweenTicks
+    )
     {
-        StartCoroutine(HealOverTimeRoutine(totalHealAmount, healPerTick, secondsBetweenTicks));
+        if (!isDead)
+        {
+            StartCoroutine(
+                HealOverTimeRoutine(
+                    totalHealAmount,
+                    healPerTick,
+                    secondsBetweenTicks
+                )
+            );
+        }
     }
 
-    private IEnumerator HealOverTimeRoutine(float totalHealAmount, float healPerTick, float secondsBetweenTicks)
+    private IEnumerator HealOverTimeRoutine(
+        float totalHealAmount,
+        float healPerTick,
+        float secondsBetweenTicks
+    )
     {
         float healedAmount = 0f;
 
@@ -88,16 +151,15 @@ public class PlayerHealth : MonoBehaviour, IDamageable
         {
             yield return new WaitForSeconds(secondsBetweenTicks);
 
-            if (isDead)
+            if (isDead || currentHealth >= maxHealth)
                 yield break;
 
-            if (currentHealth >= maxHealth)
-                yield break;
-
-            float healThisTick = Mathf.Min(healPerTick, totalHealAmount - healedAmount);
+            float healThisTick = Mathf.Min(
+                healPerTick,
+                totalHealAmount - healedAmount
+            );
 
             Heal(healThisTick);
-
             healedAmount += healThisTick;
         }
     }
@@ -109,7 +171,6 @@ public class PlayerHealth : MonoBehaviour, IDamageable
 
         isDead = true;
         currentHealth = 0f;
-
         Time.timeScale = 0f;
 
         Cursor.lockState = CursorLockMode.None;
@@ -126,24 +187,20 @@ public class PlayerHealth : MonoBehaviour, IDamageable
     public void RestartLevel()
     {
         Time.timeScale = 1f;
-
         LoadingScreenLoader.LoadScene(SceneManager.GetActiveScene().name);
     }
 
     public void GoToMainMenu()
     {
         Time.timeScale = 1f;
-
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-
         LoadingScreenLoader.LoadScene(mainMenuSceneName);
     }
 
     public void QuitGame()
     {
         Time.timeScale = 1f;
-
         Debug.Log("Quit game.");
         Application.Quit();
     }

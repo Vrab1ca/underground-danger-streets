@@ -7,7 +7,9 @@ public class PlayerHealthInventory : MonoBehaviour
     public PlayerHealth playerHealth;
 
     [Header("Inventory")]
-    public int maxHealthItems = 4;
+    [Tooltip("Legacy value only. The real limit is the number of empty hotbar slots.")]
+    public int maxHealthItems = 999;
+
     public List<HealthItemType> healthItems = new List<HealthItemType>();
 
     [Header("Selected")]
@@ -18,122 +20,180 @@ public class PlayerHealthInventory : MonoBehaviour
 
     private void Awake()
     {
+        FindPlayerHealth();
+        FixSelectedIndex();
+    }
+
+    private void FindPlayerHealth()
+    {
+        if (playerHealth != null)
+            return;
+
+        playerHealth = GetComponent<PlayerHealth>();
+
         if (playerHealth == null)
-            playerHealth = GetComponent<PlayerHealth>();
+            playerHealth = GetComponentInParent<PlayerHealth>();
+
+        if (playerHealth == null)
+            playerHealth = GetComponentInChildren<PlayerHealth>(true);
+
+        if (playerHealth == null)
+            playerHealth = FindFirstObjectByType<PlayerHealth>();
     }
 
     public bool HasHealthItem()
     {
-        return healthItems.Count > 0;
+        return healthItems != null && healthItems.Count > 0;
     }
 
     public int GetItemCount()
     {
-        return healthItems.Count;
+        return healthItems == null ? 0 : healthItems.Count;
     }
 
     public bool CanAddHealthItem()
     {
-        return healthItems.Count < maxHealthItems;
+        // WeaponSwitcher checks whether an empty hotbar slot exists.
+        return true;
     }
 
     public bool AddHealthItem(HealthItemType itemType)
     {
-        if (!CanAddHealthItem())
-        {
-            Debug.Log("Health inventory FULL: " + healthItems.Count + " / " + maxHealthItems);
-            return false;
-        }
+        if (healthItems == null)
+            healthItems = new List<HealthItemType>();
 
         healthItems.Add(itemType);
+        selectedIndex = healthItems.Count - 1;
 
-        if (selectedIndex < 0)
-            selectedIndex = 0;
-
-        if (selectedIndex >= healthItems.Count)
-            selectedIndex = healthItems.Count - 1;
-
-        Debug.Log("HEALTH ADDED TO INVENTORY: " + itemType + " | Count: " + healthItems.Count + " / " + maxHealthItems);
+        if (debugMessages)
+        {
+            Debug.Log(
+                "HEALTH ITEM ADDED: " + itemType +
+                " | Stored health items: " + healthItems.Count
+            );
+        }
 
         return true;
     }
 
     public HealthItemType GetSelectedItem()
     {
-        if (healthItems.Count <= 0)
+        if (!HasHealthItem())
             return HealthItemType.Small20;
 
-        selectedIndex = Mathf.Clamp(selectedIndex, 0, healthItems.Count - 1);
-
+        FixSelectedIndex();
         return healthItems[selectedIndex];
+    }
+
+    public HealthItemType GetItemAtIndex(int index)
+    {
+        if (healthItems == null || index < 0 || index >= healthItems.Count)
+            return HealthItemType.Small20;
+
+        return healthItems[index];
     }
 
     public void SelectNextHealthItem()
     {
-        if (healthItems.Count <= 0)
+        if (!HasHealthItem())
             return;
 
         selectedIndex++;
 
         if (selectedIndex >= healthItems.Count)
             selectedIndex = 0;
-
-        Debug.Log("Selected health item: " + GetSelectedItem());
     }
 
     public void SelectPreviousHealthItem()
     {
-        if (healthItems.Count <= 0)
+        if (!HasHealthItem())
             return;
 
         selectedIndex--;
 
         if (selectedIndex < 0)
             selectedIndex = healthItems.Count - 1;
-
-        Debug.Log("Selected health item: " + GetSelectedItem());
     }
 
     public bool UseSelectedHealthItem()
     {
+        FindPlayerHealth();
+
         if (playerHealth == null)
         {
-            Debug.LogWarning("PlayerHealth missing.");
+            Debug.LogWarning("PlayerHealth is missing.");
             return false;
         }
 
-        if (healthItems.Count <= 0)
-        {
-            Debug.Log("No health items.");
+        if (!HasHealthItem())
             return false;
-        }
 
-        selectedIndex = Mathf.Clamp(selectedIndex, 0, healthItems.Count - 1);
+        FixSelectedIndex();
 
         HealthItemType itemType = healthItems[selectedIndex];
 
-        if (itemType == HealthItemType.Small20)
-            playerHealth.Heal(20f);
+        switch (itemType)
+        {
+            case HealthItemType.Small20:
+                playerHealth.Heal(20f);
+                break;
 
-        if (itemType == HealthItemType.Medium50)
-            playerHealth.Heal(50f);
+            case HealthItemType.Medium50:
+                playerHealth.Heal(50f);
+                break;
 
-        if (itemType == HealthItemType.Full100)
-            playerHealth.Heal(100f);
+            case HealthItemType.Full100:
+                playerHealth.Heal(100f);
+                break;
 
-        if (itemType == HealthItemType.Regen50)
-            playerHealth.HealOverTime(50f, 10f, 1f);
+            case HealthItemType.Regen50:
+                playerHealth.HealOverTime(50f, 10f, 1f);
+                break;
+        }
 
         healthItems.RemoveAt(selectedIndex);
+        FixSelectedIndex();
 
-        if (selectedIndex >= healthItems.Count)
-            selectedIndex = healthItems.Count - 1;
-
-        if (selectedIndex < 0)
-            selectedIndex = 0;
-
-        Debug.Log("USED HEALTH: " + itemType + " | Left: " + healthItems.Count);
+        if (debugMessages)
+            Debug.Log("USED HEALTH: " + itemType);
 
         return true;
+    }
+
+    public bool UseHealthItemAtIndex(int index)
+    {
+        if (healthItems == null || index < 0 || index >= healthItems.Count)
+            return false;
+
+        selectedIndex = index;
+        return UseSelectedHealthItem();
+    }
+
+    public int FindItemIndex(HealthItemType itemType)
+    {
+        if (healthItems == null)
+            return -1;
+
+        for (int i = 0; i < healthItems.Count; i++)
+        {
+            if (healthItems[i] == itemType)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private void FixSelectedIndex()
+    {
+        if (healthItems == null)
+            healthItems = new List<HealthItemType>();
+
+        if (healthItems.Count <= 0)
+        {
+            selectedIndex = 0;
+            return;
+        }
+
+        selectedIndex = Mathf.Clamp(selectedIndex, 0, healthItems.Count - 1);
     }
 }

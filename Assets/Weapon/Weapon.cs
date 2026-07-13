@@ -3,9 +3,16 @@ using UnityEngine;
 
 public class Weapon : MonoBehaviour
 {
+    public enum WeaponMode
+    {
+        Gun,
+        Melee
+    }
+
     [Header("Weapon Info")]
     public string weaponName = "Weapon";
     public GameObject pickupPrefab;
+    public WeaponMode weaponMode = WeaponMode.Gun;
 
     [Header("Typed Ammo")]
     public WeaponAmmoType ammoType = WeaponAmmoType.Rifle;
@@ -32,6 +39,13 @@ public class Weapon : MonoBehaviour
     public float range = 100f;
     public float fireRate = 8f;
     public bool automatic = false;
+
+    [Header("Melee Settings")]
+    public float meleeRadius = 0.6f;
+    public float meleeAngle = 80f;
+    public LayerMask meleeHitLayers = ~0;
+    public string meleeAttackTrigger = "Attack";
+    public SimpleMeleeAnimation simpleMeleeAnimation;
 
     [Header("Shotgun / Spread")]
     public int pellets = 1;
@@ -67,10 +81,7 @@ public class Weapon : MonoBehaviour
 
     public bool IsZoomed
     {
-        get
-        {
-            return isZoomed;
-        }
+        get { return isZoomed; }
     }
 
     public bool IsSniperZooming()
@@ -80,26 +91,17 @@ public class Weapon : MonoBehaviour
 
     public int AmmoInMagazine
     {
-        get
-        {
-            return ammoInMagazine;
-        }
+        get { return ammoInMagazine; }
     }
 
     public int ReserveAmmo
     {
-        get
-        {
-            return reserveAmmo;
-        }
+        get { return reserveAmmo; }
     }
 
     public bool IsReloading
     {
-        get
-        {
-            return reloading;
-        }
+        get { return reloading; }
     }
 
     private void Awake()
@@ -118,6 +120,15 @@ public class Weapon : MonoBehaviour
         if (fpsCamera != null)
             normalFOV = fpsCamera.fieldOfView;
 
+        if (simpleMeleeAnimation == null)
+            simpleMeleeAnimation = GetComponent<SimpleMeleeAnimation>();
+
+        if (simpleMeleeAnimation == null)
+            simpleMeleeAnimation = GetComponentInChildren<SimpleMeleeAnimation>();
+
+        if (shootEffect == null)
+            shootEffect = GetComponentInChildren<WeaponShootEffect>();
+
         ResetZoomInstant();
     }
 
@@ -134,20 +145,20 @@ public class Weapon : MonoBehaviour
         if (reloading)
             return;
 
-        if (Input.GetKeyDown(KeyCode.R))
+        if (weaponMode == WeaponMode.Gun && Input.GetKeyDown(KeyCode.R))
         {
             StartCoroutine(Reload());
             return;
         }
 
-        bool wantsShoot;
+        bool wantsAttack;
 
         if (automatic)
-            wantsShoot = Input.GetMouseButton(0);
+            wantsAttack = Input.GetMouseButton(0);
         else
-            wantsShoot = Input.GetMouseButtonDown(0);
+            wantsAttack = Input.GetMouseButtonDown(0);
 
-        if (wantsShoot && Time.time >= nextFireTime)
+        if (wantsAttack && Time.time >= nextFireTime)
         {
             nextFireTime = Time.time + 1f / fireRate;
             Shoot();
@@ -196,6 +207,9 @@ public class Weapon : MonoBehaviour
     private void HandleZoomInput()
     {
         if (!enableSniperZoom)
+            return;
+
+        if (weaponMode == WeaponMode.Melee)
             return;
 
         Camera shootCam = GetShootCamera();
@@ -314,6 +328,12 @@ public class Weapon : MonoBehaviour
 
     private void Shoot()
     {
+        if (weaponMode == WeaponMode.Melee)
+        {
+            MeleeAttack();
+            return;
+        }
+
         Camera shootCam = GetShootCamera();
 
         if (shootCam == null)
@@ -420,8 +440,113 @@ public class Weapon : MonoBehaviour
         }
     }
 
+    private void MeleeAttack()
+    {
+        Camera shootCam = GetShootCamera();
+
+        if (shootCam == null)
+        {
+            Debug.LogWarning("Cannot melee attack: No camera found on weapon " + weaponName);
+            return;
+        }
+
+        if (debugMessages)
+            Debug.Log(weaponName + " melee attack.");
+
+        if (simpleMeleeAnimation != null)
+            simpleMeleeAnimation.PlayAttack();
+
+        if (audioSource != null && shootClip != null)
+            audioSource.PlayOneShot(shootClip);
+
+        if (animator != null && !string.IsNullOrEmpty(meleeAttackTrigger))
+            animator.SetTrigger(meleeAttackTrigger);
+
+        if (shootEffect != null)
+            shootEffect.PlayShootEffect();
+
+        Vector3 attackCenter = shootCam.transform.position + shootCam.transform.forward * range;
+
+        Collider[] hits = Physics.OverlapSphere(
+            attackCenter,
+            meleeRadius,
+            meleeHitLayers,
+            QueryTriggerInteraction.Ignore
+        );
+
+        IDamageable closestDamageable = null;
+        Collider closestCollider = null;
+        float closestDistance = Mathf.Infinity;
+
+        foreach (Collider hit in hits)
+        {
+            if (hit == null)
+                continue;
+
+            if (hit.transform.IsChildOf(transform.root))
+                continue;
+
+            IDamageable damageable = hit.GetComponentInParent<IDamageable>();
+
+            if (damageable == null)
+                continue;
+
+            MonoBehaviour damageableBehaviour = damageable as MonoBehaviour;
+
+            if (damageableBehaviour == null)
+                continue;
+
+            Vector3 directionToTarget = damageableBehaviour.transform.position - shootCam.transform.position;
+            float distance = directionToTarget.magnitude;
+
+            if (distance > range + meleeRadius)
+                continue;
+
+            float angle = Vector3.Angle(shootCam.transform.forward, directionToTarget.normalized);
+
+            if (angle > meleeAngle)
+                continue;
+
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestDamageable = damageable;
+                closestCollider = hit;
+            }
+        }
+
+        if (closestDamageable != null)
+        {
+            closestDamageable.TakeDamage(damage);
+
+            if (debugMessages)
+                Debug.Log(weaponName + " melee hit " + closestCollider.name + " for " + damage);
+
+            if (impactEffect != null && closestCollider != null)
+            {
+                Vector3 hitPoint = closestCollider.ClosestPoint(shootCam.transform.position);
+
+                GameObject impact = Instantiate(
+                    impactEffect,
+                    hitPoint,
+                    Quaternion.identity
+                );
+
+                Destroy(impact, 2f);
+            }
+        }
+        else
+        {
+            if (debugMessages)
+                Debug.Log(weaponName + " melee missed.");
+        }
+    }
+
     private IEnumerator Reload()
     {
+        if (weaponMode == WeaponMode.Melee)
+            yield break;
+
         if (ammoInMagazine >= magazineSize)
             yield break;
 
@@ -503,5 +628,20 @@ public class Weapon : MonoBehaviour
         Camera anyCamera = FindFirstObjectByType<Camera>();
 
         return anyCamera;
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        if (weaponMode != WeaponMode.Melee)
+            return;
+
+        Camera cam = Camera.main;
+
+        if (cam == null)
+            return;
+
+        Gizmos.color = Color.red;
+        Vector3 center = cam.transform.position + cam.transform.forward * range;
+        Gizmos.DrawWireSphere(center, meleeRadius);
     }
 }
