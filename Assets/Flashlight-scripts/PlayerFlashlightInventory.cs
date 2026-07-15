@@ -89,6 +89,30 @@ public class PlayerFlashlightInventory : MonoBehaviour
         return true;
     }
 
+    public bool RemoveFlashlight(out float remainingCharge)
+    {
+        remainingCharge = currentCharge;
+
+        if (!hasFlashlight)
+        {
+            remainingCharge = 0f;
+            return false;
+        }
+
+        hasFlashlight = false;
+        currentCharge = 0f;
+
+        if (debugMessages)
+        {
+            Debug.Log(
+                "FLASHLIGHT REMOVED FROM INVENTORY | Dropped charge: " +
+                Mathf.CeilToInt(remainingCharge) + "%"
+            );
+        }
+
+        return true;
+    }
+
     public float GetBatteryChargeAmount(
         FlashlightBatteryType batteryType
     )

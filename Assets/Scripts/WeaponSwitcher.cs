@@ -120,8 +120,30 @@ public class WeaponSwitcher : MonoBehaviour
     public KeyCode handsKey = KeyCode.Q;
     public KeyCode dropKey = KeyCode.G;
 
-    [Header("Drop Weapon")]
+    [Header("Drop Point")]
+    [Tooltip("Where dropped weapons, batteries and the flashlight appear.")]
     public Transform dropPoint;
+
+    [Header("Flashlight Drop Prefab")]
+    [Tooltip("Prefab with FlashlightPickup attached. Used when dropping the flashlight.")]
+    public GameObject flashlightDropPrefab;
+
+    [Header("Battery Drop Prefabs")]
+    [Tooltip("Prefab with BatteryPickup attached for an A battery.")]
+    public GameObject batteryADropPrefab;
+
+    [Tooltip("Prefab with BatteryPickup attached for an AA battery.")]
+    public GameObject batteryAADropPrefab;
+
+    [Tooltip("Prefab with BatteryPickup attached for an AAA battery.")]
+    public GameObject batteryAAADropPrefab;
+
+    [Header("Drop Physics")]
+    [Min(0f)]
+    public float droppedItemForwardForce = 1.5f;
+
+    [Min(0f)]
+    public float droppedItemUpForce = 0.5f;
 
     [Header("Mouse Scroll")]
     public float scrollCooldown = 0.08f;
@@ -1405,7 +1427,44 @@ public class WeaponSwitcher : MonoBehaviour
         if (!Input.GetKeyDown(dropKey))
             return;
 
-        DropCurrentWeapon();
+        DropSelectedItem();
+    }
+
+    public void DropSelectedItem()
+    {
+        if (selectedHotbarIndex < 0 ||
+            selectedHotbarIndex >= slots.Count)
+        {
+            return;
+        }
+
+        RuntimeHotbarSlot selectedSlotData =
+            slots[selectedHotbarIndex];
+
+        switch (selectedSlotData.itemType)
+        {
+            case HotbarItemType.Weapon:
+                DropCurrentWeapon();
+                break;
+
+            case HotbarItemType.Flashlight:
+                DropCurrentFlashlight();
+                break;
+
+            case HotbarItemType.Battery:
+                DropCurrentBattery();
+                break;
+
+            default:
+                if (debugHotbar)
+                {
+                    Debug.Log(
+                        "The selected item cannot be dropped with " +
+                        dropKey + "."
+                    );
+                }
+                break;
+        }
     }
 
     public void DropCurrentWeapon()
@@ -1425,10 +1484,7 @@ public class WeaponSwitcher : MonoBehaviour
             return;
         }
 
-        Vector3 spawnPosition =
-            dropPoint != null
-                ? dropPoint.position
-                : transform.position + transform.forward * 2f;
+        Vector3 spawnPosition = GetDropPosition();
 
         GameObject droppedPickup = Instantiate(
             activeWeapon.pickupPrefab,
@@ -1437,14 +1493,266 @@ public class WeaponSwitcher : MonoBehaviour
         );
 
         droppedPickup.SetActive(true);
+        ApplyDropPhysics(droppedPickup);
 
         int oldSlotIndex = selectedHotbarIndex;
 
         ClearSlot(oldSlotIndex);
         Destroy(activeWeapon.gameObject);
+        SelectHands();
+    }
 
-        UpdateLegacySelectedSlot();
-        RefreshVisuals();
+    public void DropCurrentFlashlight()
+    {
+        if (!IsFlashlightSelected())
+            return;
+
+        if (flashlightInventory == null)
+        {
+            Debug.LogWarning(
+                "PlayerFlashlightInventory is missing."
+            );
+            return;
+        }
+
+        if (!flashlightInventory.HasFlashlight)
+        {
+            Debug.LogWarning(
+                "The player does not own a flashlight."
+            );
+            return;
+        }
+
+        if (flashlightDropPrefab == null)
+        {
+            Debug.LogWarning(
+                "Flashlight Drop Prefab is not assigned in WeaponSwitcher."
+            );
+            return;
+        }
+
+        FlashlightPickup prefabPickup =
+            flashlightDropPrefab.GetComponentInChildren
+                <FlashlightPickup>(true);
+
+        if (prefabPickup == null)
+        {
+            Debug.LogWarning(
+                "Flashlight Drop Prefab needs a FlashlightPickup component."
+            );
+            return;
+        }
+
+        float remainingCharge =
+            flashlightInventory.CurrentCharge;
+
+        GameObject droppedObject = Instantiate(
+            flashlightDropPrefab,
+            GetDropPosition(),
+            Quaternion.identity
+        );
+
+        FlashlightPickup droppedPickup =
+            droppedObject.GetComponentInChildren
+                <FlashlightPickup>(true);
+
+        if (droppedPickup == null)
+        {
+            Destroy(droppedObject);
+            Debug.LogWarning(
+                "The spawned flashlight object has no FlashlightPickup component."
+            );
+            return;
+        }
+
+        float removedCharge;
+
+        if (!flashlightInventory.RemoveFlashlight(
+                out removedCharge))
+        {
+            Destroy(droppedObject);
+            return;
+        }
+
+        droppedPickup.startingCharge =
+            Mathf.Clamp(remainingCharge, 0f, 100f);
+
+        droppedPickup.destroyWholeCaseAfterPickup = true;
+        droppedPickup.enabled = true;
+
+        if (droppedPickup.flashlightObjectInCase != null)
+        {
+            droppedPickup.flashlightObjectInCase
+                .SetActive(true);
+        }
+
+        droppedObject.SetActive(true);
+        ApplyDropPhysics(droppedObject);
+
+        int oldSlotIndex = selectedHotbarIndex;
+        ClearSlot(oldSlotIndex);
+        SelectHands();
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                "Dropped flashlight with " +
+                Mathf.CeilToInt(remainingCharge) +
+                "% charge."
+            );
+        }
+    }
+
+    public void DropCurrentBattery()
+    {
+        if (!IsBatterySelected())
+            return;
+
+        RuntimeHotbarSlot selectedSlotData =
+            slots[selectedHotbarIndex];
+
+        FlashlightBatteryType batteryType =
+            selectedSlotData.batteryType;
+
+        GameObject dropPrefab =
+            GetBatteryDropPrefab(batteryType);
+
+        if (dropPrefab == null)
+        {
+            Debug.LogWarning(
+                "No drop prefab is assigned for " +
+                batteryType + " battery."
+            );
+            return;
+        }
+
+        BatteryPickup prefabPickup =
+            dropPrefab.GetComponentInChildren
+                <BatteryPickup>(true);
+
+        if (prefabPickup == null)
+        {
+            Debug.LogWarning(
+                batteryType +
+                " Battery Drop Prefab needs a BatteryPickup component."
+            );
+            return;
+        }
+
+        GameObject droppedObject = Instantiate(
+            dropPrefab,
+            GetDropPosition(),
+            Quaternion.identity
+        );
+
+        BatteryPickup droppedPickup =
+            droppedObject.GetComponentInChildren
+                <BatteryPickup>(true);
+
+        if (droppedPickup == null)
+        {
+            Destroy(droppedObject);
+            return;
+        }
+
+        droppedPickup.batteryType = batteryType;
+        droppedPickup.destroyWholeCaseAfterPickup = true;
+        droppedPickup.enabled = true;
+
+        if (droppedPickup.batteryObjectInCase != null)
+        {
+            droppedPickup.batteryObjectInCase
+                .SetActive(true);
+        }
+
+        droppedObject.SetActive(true);
+        ApplyDropPhysics(droppedObject);
+
+        int oldSlotIndex = selectedHotbarIndex;
+        ClearSlot(oldSlotIndex);
+        SelectHands();
+
+        if (debugHotbar)
+        {
+            Debug.Log(
+                "Dropped " +
+                batteryType +
+                " battery."
+            );
+        }
+    }
+
+    private GameObject GetBatteryDropPrefab(
+        FlashlightBatteryType batteryType)
+    {
+        switch (batteryType)
+        {
+            case FlashlightBatteryType.A:
+                return batteryADropPrefab;
+
+            case FlashlightBatteryType.AA:
+                return batteryAADropPrefab;
+
+            case FlashlightBatteryType.AAA:
+                return batteryAAADropPrefab;
+
+            default:
+                return null;
+        }
+    }
+
+    private Vector3 GetDropPosition()
+    {
+        if (dropPoint != null)
+            return dropPoint.position;
+
+        Transform source =
+            fpsCamera != null
+                ? fpsCamera.transform
+                : transform;
+
+        return source.position +
+               source.forward * 1.2f +
+               Vector3.down * 0.2f;
+    }
+
+    private void ApplyDropPhysics(GameObject droppedObject)
+    {
+        if (droppedObject == null)
+            return;
+
+        Rigidbody body =
+            droppedObject.GetComponent<Rigidbody>();
+
+        if (body == null)
+        {
+            body =
+                droppedObject.GetComponentInChildren
+                    <Rigidbody>();
+        }
+
+        if (body == null)
+            return;
+
+        body.isKinematic = false;
+        body.useGravity = true;
+        body.detectCollisions = true;
+
+        Transform source =
+            fpsCamera != null
+                ? fpsCamera.transform
+                : transform;
+
+        Vector3 force =
+            source.forward *
+            droppedItemForwardForce +
+            Vector3.up *
+            droppedItemUpForce;
+
+        body.AddForce(
+            force,
+            ForceMode.Impulse
+        );
     }
 
     // =========================================================
